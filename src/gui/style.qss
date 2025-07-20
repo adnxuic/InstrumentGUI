@@ -1,0 +1,11 @@
+QFrame#left_column
+{
+    background-color: #c8cbd1;
+}
+
+
+QFrame#right_column
+{
+    background-color: #e85500;
+}
+

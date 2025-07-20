@@ -1,0 +1,6 @@
+
+QFrame#right_panel
+{
+    background-color: #00e817;
+}
+

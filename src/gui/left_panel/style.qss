@@ -1,0 +1,6 @@
+QFrame#left_panel
+{
+    background-color: #ccc8c8;
+}
+
+
