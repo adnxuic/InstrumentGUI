@@ -200,3 +200,35 @@ class InstrumentsControl:
         except Exception as e:
             self.logger.error(f"移除仪器失败: {e}")
             return False
+
+    def close_all_instruments(self) -> bool:
+        """关闭所有仪器连接，用于程序退出时的清理
+        
+        Returns:
+            bool: 清理是否成功
+        """
+        success = True
+        instruments_to_close = list(self.instruments_instance.keys())  # 创建副本避免修改字典时出错
+        
+        for instrument_address in instruments_to_close:
+            try:
+                instrument = self.instruments_instance[instrument_address]
+                if hasattr(instrument, 'close'):
+                    instrument.close()
+                    self.logger.info(f"已关闭仪器连接: {instrument_address}")
+                else:
+                    self.logger.warning(f"仪器 {instrument_address} 没有 close 方法")
+                    
+            except Exception as e:
+                self.logger.error(f"关闭仪器 {instrument_address} 时发生错误: {e}")
+                success = False
+        
+        # 清空实例字典
+        self.instruments_instance.clear()
+        
+        if success:
+            self.logger.info("所有仪器连接已成功关闭")
+        else:
+            self.logger.warning("部分仪器连接关闭时出现错误")
+            
+        return success

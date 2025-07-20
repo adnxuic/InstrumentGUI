@@ -18,7 +18,14 @@ class PPMS:
         self._port = port
         self._host = host
 
-        self.test()
+        try:
+            self.client = mpv.Client(self._host, self._port)
+            self.client.open()
+            print("PPMS connected")
+        except Exception as e:
+            print(f"Error: {e}")
+            print("Test failed, PPMS is not connected.")
+            raise ConnectionError(f"无法连接到PPMS {self._host}:{self._port} - {str(e)}")
 
     def reset(self, host, port):
         """
@@ -29,23 +36,6 @@ class PPMS:
         self._port = port
         self._host = host
 
-    def test(self):
-        """
-        Test the connection to the PPMS.
-        Raises ConnectionError if connection fails.
-        """
-        print(f"Testing connection to PPMS at {self._host}:{self._port}...")
-        try:
-            with mpv.Client(self._host, self._port) as client:
-                print(client.get_temperature())
-                print(client.get_field())
-            print("Test successful, PPMS is connected.")
-        except Exception as e:
-            print(f"Error: {e}")
-            print("Test failed, PPMS is not connected.")
-            # 抛出ConnectionError以便上层处理
-            raise ConnectionError(f"无法连接到PPMS {self._host}:{self._port} - {str(e)}")
-
     def get_temperature_field(self):
         """
         Get the temperature and field from the PPMS.
@@ -55,14 +45,14 @@ class PPMS:
         F: Float, field in Oe.
         sF: status of the field
         """
-        with mpv.Client(self._host, self._port) as client:
-            T, sT = client.get_temperature()
-            F, sF = client.get_field()
+        T, sT = self.client.get_temperature()
+        F, sF = self.client.get_field()
 
         return T, sT, F, sF
     
     def close(self):
-        pass
+        self.client.close_client()
+        print("PPMS closed")
 
 
 

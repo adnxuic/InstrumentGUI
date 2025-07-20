@@ -162,11 +162,6 @@ class SR830:
 		"""
 		assert i<5 and i>0
 		return(float(self.inst.query("OUTP? "+str(i))))
-	def getRTh(self):
-		return(np.array([float(self.inst.query("OUTP? "+str(3))),float(self.inst.query("OUTP? "+str(4)))]))
-			
-	def getXY(self):
-		return(np.array([float(self.inst.query("OUTP? "+str(1))),float(self.inst.query("OUTP? "+str(2)))]))
 	
 	def getSnap(self, *params):
 		"""
@@ -211,6 +206,12 @@ class SR830:
 		# Parse the returned string and convert it to a float array
 		values = [float(val) for val in response.strip().split(',')]
 		return np.array(values)
+	
+	def getRTh(self):
+		return(self.getSnap(3, 4))
+			
+	def getXY(self):
+		return(self.getSnap(1, 2))
 
 	def write(self,message,q=False):
 		if q:

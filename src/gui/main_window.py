@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QSplitter, QMenuBar, QMenu, QStatusBar, QMessageBox,
     QFileDialog, QProgressBar
 )
-from PySide6.QtGui import QAction, QIcon, QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QAction, QIcon, QDragEnterEvent, QDropEvent, QCloseEvent
 from PySide6.QtCore import Qt
 
 from .left_column import PyLeftColumn
@@ -98,12 +98,16 @@ class MainWindow(QMainWindow):
         self.left_column = PyLeftColumn()
         self.left_panel = PyLeftPanel(self.instruments_control)
         self.plot_widget = PyFigureWindow()
-        self.right_panel = PyRightPanel()
+        self.right_panel = PyRightPanel(self.instruments_control)
         self.right_column = PyRightColumn()
         
         # 连接左侧栏信号到左侧面板
         self.left_column.panel_changed.connect(self.left_panel.switch_to_panel)
         self.left_column.panel_collapsed.connect(self.left_panel.hide_panel)
+        
+        # 连接右侧栏信号到右侧面板
+        self.right_column.panel_changed.connect(self.right_panel.switch_to_panel)
+        self.right_column.panel_collapsed.connect(self.right_panel.hide_panel)
         
         # 添加组件到分割器
         self.central_splitter.addWidget(self.left_column)
@@ -128,3 +132,30 @@ class MainWindow(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
+
+    def closeEvent(self, event: QCloseEvent):
+        """关闭事件"""
+        reply = QMessageBox.question(
+            self,
+            "退出",
+            "确定要退出吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        if reply == QMessageBox.Yes:
+            # 在关闭窗口前清理所有仪器连接
+            try:
+                if hasattr(self, 'instruments_control'):
+                    success = self.instruments_control.close_all_instruments()
+                    if success:
+                        self.status_bar.showMessage("所有仪器连接已关闭")
+                    else:
+                        self.status_bar.showMessage("部分仪器连接关闭时出现错误")
+            except Exception as e:
+                # 即使清理失败也要继续关闭程序，但要记录错误
+                print(f"清理仪器连接时发生错误: {e}")
+                self.status_bar.showMessage(f"清理时发生错误: {e}")
+            
+            event.accept()
+        else:
+            event.ignore()
