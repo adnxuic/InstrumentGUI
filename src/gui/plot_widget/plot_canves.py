@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 import matplotlib as mpl
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -9,38 +9,266 @@ from matplotlib.backends.backend_qtagg import (
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.style import use
-
-import numpy as np
-from numpy import (sin, cos, tan, pi,
-                   exp, log,
-                   sinh, cosh, tanh, arcsin, arccos, arctan, arcsinh)
+import matplotlib.pyplot as plt
 
 mpl.use("QtAgg")
-
-
-#
-# mpl.rcParams['text.usetex'] = True
-# preamble = r'\usepackage{amsmath,amssymb,amsthm}'
-# mpl.rcParams['text.latex.preamble'] = preamble
+plt.rcParams['font.family'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
 
 
 class PyFigureCanvas(QWidget):
-    def __init__(self, parent=None, width=4, height=3, dpi=100, style=None):
+    def __init__(self, parent=None, width=8, height=6, dpi=100):
         super().__init__()
 
-        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        # 创建适中大小的figure，让它能适应canvas
+        self.fig = Figure(figsize=(width, height), dpi=dpi, tight_layout=True)
         self.canva = FigureCanvasQTAgg(self.fig)
-        self.canva.setFixedSize(width * dpi, height * dpi)
+        
+        # 不设置固定大小，让canvas自适应
+        # 设置合理的最小大小
+        self.canva.setMinimumSize(400, 300)
+        
+        # 为数据记录创建双轴图
+        self.setup_data_record_plots()
 
         self.init_set()
+
+    def setup_data_record_plots(self):
+        """为数据记录设置双轴图表"""
+        # 清除现有的轴
+        self.fig.clear()
+        
+        # 创建两个子图，调整间距
+        self.ax1 = self.fig.add_subplot(2, 1, 1)
+        self.ax2 = self.fig.add_subplot(2, 1, 2)
+        
+        # 设置初始标题和标签
+        self.ax1.set_title("实时数据图表 1", fontsize=12, fontweight='bold')
+        self.ax2.set_title("实时数据图表 2", fontsize=12, fontweight='bold')
+        
+        # 设置初始轴标签
+        self.ax1.set_xlabel("时间 (s)")
+        self.ax1.set_ylabel("数值")
+        self.ax2.set_xlabel("时间 (s)")
+        self.ax2.set_ylabel("数值")
+        
+        # 启用网格
+        self.ax1.grid(True, alpha=0.3)
+        self.ax2.grid(True, alpha=0.3)
+        
+        # 初始化线条对象
+        self.line1, = self.ax1.plot([], [], 'b-', linewidth=2, label='数据1')
+        self.line2, = self.ax2.plot([], [], 'r-', linewidth=2, label='数据2')
+        
+        # 添加图例
+        self.ax1.legend(loc='upper right')
+        self.ax2.legend(loc='upper right')
+        
+        # 设置图表间距，使用更紧凑的布局
+        self.fig.subplots_adjust(left=0.12, right=0.95, top=0.92, bottom=0.12, hspace=0.45)
+        
+        # 数据存储
+        self.plot1_data = {'x': [], 'y': []}
+        self.plot2_data = {'x': [], 'y': []}
+        
+        # 数据窗口大小（显示最近的N个点）
+        self.max_points = 1000
+        
+        # 自动缩放标志
+        self.auto_scale = True
+        
+    def update_data_record_plots(self, plot_data):
+        """更新数据记录图表
+        
+        Args:
+            plot_data: 包含两个图表数据的字典
+                {
+                    'plot1': {'x': [...], 'y': [...]},
+                    'plot2': {'x': [...], 'y': [...]},
+                    'settings': {'plot1': {'x_axis': ..., 'y_axis': ...}, ...}
+                }
+        """
+        if not plot_data:
+            return
+            
+        try:
+            # 更新图表1
+            if 'plot1' in plot_data and plot_data['plot1']['x'] and plot_data['plot1']['y']:
+                x1_data = plot_data['plot1']['x']
+                y1_data = plot_data['plot1']['y']
+                
+                # 限制数据点数量
+                if len(x1_data) > self.max_points:
+                    x1_data = x1_data[-self.max_points:]
+                    y1_data = y1_data[-self.max_points:]
+                
+                self.line1.set_data(x1_data, y1_data)
+                
+                # 更新轴范围
+                if self.auto_scale and x1_data and y1_data:
+                    self.ax1.set_xlim(min(x1_data), max(x1_data))
+                    margin = 0.1 * (max(y1_data) - min(y1_data)) if max(y1_data) != min(y1_data) else 0.1
+                    self.ax1.set_ylim(min(y1_data) - margin, max(y1_data) + margin)
+            
+            # 更新图表2
+            if 'plot2' in plot_data and plot_data['plot2']['x'] and plot_data['plot2']['y']:
+                x2_data = plot_data['plot2']['x']
+                y2_data = plot_data['plot2']['y']
+                
+                # 限制数据点数量
+                if len(x2_data) > self.max_points:
+                    x2_data = x2_data[-self.max_points:]
+                    y2_data = y2_data[-self.max_points:]
+                
+                self.line2.set_data(x2_data, y2_data)
+                
+                # 更新轴范围
+                if self.auto_scale and x2_data and y2_data:
+                    self.ax2.set_xlim(min(x2_data), max(x2_data))
+                    margin = 0.1 * (max(y2_data) - min(y2_data)) if max(y2_data) != min(y2_data) else 0.1
+                    self.ax2.set_ylim(min(y2_data) - margin, max(y2_data) + margin)
+            
+            # 更新轴标签
+            if 'settings' in plot_data:
+                settings = plot_data['settings']
+                
+                # 更新图表1轴标签
+                if 'plot1' in settings:
+                    self.ax1.set_xlabel(self._format_axis_label(settings['plot1']['x_axis']))
+                    self.ax1.set_ylabel(self._format_axis_label(settings['plot1']['y_axis']))
+                    self.line1.set_label(settings['plot1']['y_axis'])
+                
+                # 更新图表2轴标签
+                if 'plot2' in settings:
+                    self.ax2.set_xlabel(self._format_axis_label(settings['plot2']['x_axis']))
+                    self.ax2.set_ylabel(self._format_axis_label(settings['plot2']['y_axis']))
+                    self.line2.set_label(settings['plot2']['y_axis'])
+                
+                # 更新图例
+                self.ax1.legend(loc='upper right')
+                self.ax2.legend(loc='upper right')
+            
+            # 重新绘制
+            self.canva.draw()
+            
+        except Exception as e:
+            print(f"更新图表时出错: {e}")
+            
+    def _format_axis_label(self, column_name):
+        """格式化轴标签"""
+        if column_name == 'time':
+            return "时间 (s)"
+        elif column_name.startswith('SR830_'):
+            parts = column_name.split('_')
+            if len(parts) >= 3:
+                instrument = parts[1]
+                param = parts[2]
+                param_names = {
+                    'X': 'X分量 (V)',
+                    'Y': 'Y分量 (V)', 
+                    'R': '幅度 R (V)',
+                    'theta': '相位 θ (°)'
+                }
+                return f"{instrument} - {param_names.get(param, param)}"
+        elif column_name.startswith('PPMS_'):
+            parts = column_name.split('_')
+            if len(parts) >= 3:
+                instrument = parts[1]
+                param = parts[2]
+                param_names = {
+                    'temperature': '温度 (K)',
+                    'field': '磁场 (Oe)'
+                }
+                return f"{instrument} - {param_names.get(param, param)}"
+        
+        return column_name
+        
+    def clear_data_record_plots(self):
+        """清空数据记录图表"""
+        self.line1.set_data([], [])
+        self.line2.set_data([], [])
+        self.plot1_data = {'x': [], 'y': []}
+        self.plot2_data = {'x': [], 'y': []}
+        
+        # 重置轴范围
+        self.ax1.set_xlim(0, 1)
+        self.ax1.set_ylim(0, 1)
+        self.ax2.set_xlim(0, 1)
+        self.ax2.set_ylim(0, 1)
+        
+        self.canva.draw()
+        
+    def set_auto_scale(self, enabled):
+        """设置自动缩放"""
+        self.auto_scale = enabled
+        
+    def set_max_points(self, max_points):
+        """设置最大显示点数"""
+        self.max_points = max_points
+        
+    def save_plot(self, filename):
+        """保存图表"""
+        try:
+            self.fig.savefig(filename, dpi=300, bbox_inches='tight')
+            return True
+        except Exception as e:
+            print(f"保存图表失败: {e}")
+            return False
+            
+    def setup_frequency_sweep_plot(self):
+        """设置频率扫描图表"""
+        self.fig.clear()
+        self.ax1 = self.fig.add_subplot(1, 1, 1)
+        self.ax1.set_title("频率扫描", fontsize=14, fontweight='bold')
+        self.ax1.set_xlabel("频率 (Hz)")
+        self.ax1.set_ylabel("幅度")
+        self.ax1.grid(True, alpha=0.3)
+        
+        # 更好的布局
+        self.fig.subplots_adjust(left=0.12, right=0.95, top=0.88, bottom=0.15)
+        self.canva.draw()
+        
+    def setup_frequency_tracking_plot(self):
+        """设置频率追踪图表"""
+        self.fig.clear()
+        
+        # 创建主轴和副轴
+        self.ax1 = self.fig.add_subplot(2, 1, 1)
+        self.ax2 = self.fig.add_subplot(2, 1, 2)
+        
+        self.ax1.set_title("频率追踪 - 幅度", fontsize=12, fontweight='bold')
+        self.ax1.set_ylabel("幅度")
+        self.ax1.grid(True, alpha=0.3)
+        
+        self.ax2.set_title("频率追踪 - 频率", fontsize=12, fontweight='bold')
+        self.ax2.set_xlabel("时间 (s)")
+        self.ax2.set_ylabel("频率 (Hz)")
+        self.ax2.grid(True, alpha=0.3)
+        
+        # 更好的布局
+        self.fig.subplots_adjust(left=0.12, right=0.95, top=0.92, bottom=0.12, hspace=0.45)
+        self.canva.draw()
+        
+    def setup_general_plot(self):
+        """设置通用图表"""
+        self.fig.clear()
+        self.ax1 = self.fig.add_subplot(1, 1, 1)
+        self.ax1.set_title("数据图表", fontsize=14, fontweight='bold')
+        self.ax1.set_xlabel("X轴")
+        self.ax1.set_ylabel("Y轴")
+        self.ax1.grid(True, alpha=0.3)
+        
+        # 更好的布局
+        self.fig.subplots_adjust(left=0.12, right=0.95, top=0.88, bottom=0.15)
+        self.canva.draw()
 
     def init_set(self):
         # 添加滚动条
         self.scroArea = QScrollArea()
         self.scroArea.setWidget(self.canva)
         self.scroArea.setAlignment(Qt.AlignCenter)
-        self.scroArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # 设置显示策略
-        self.scroArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # 设置显示策略
+        self.scroArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         layout = QVBoxLayout()
 

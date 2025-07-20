@@ -2,3 +2,6 @@
 *.log
 *.json
 
+QdMultiVu.log
+QdMultiVu.log.1
+config/instruments_config.json

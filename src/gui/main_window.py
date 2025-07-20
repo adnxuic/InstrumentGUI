@@ -29,6 +29,7 @@ class MainWindow(QMainWindow):
         self.instruments_control = InstrumentsControl()
 
         self.init_ui()
+        self.connect_data_signals()
         
     def init_ui(self):
         """初始化用户界面"""
@@ -45,6 +46,11 @@ class MainWindow(QMainWindow):
 
         # 创建状态栏
         self.create_status_bar()
+        
+    def connect_data_signals(self):
+        """连接数据信号"""
+        # 当右侧面板切换时，同时处理图表更新
+        self.right_column.panel_changed.connect(self.on_panel_changed)
 
     def create_menu_bar(self):
         """创建菜单栏"""
@@ -61,9 +67,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction(export_stokes_action)
         
         export_plot_action = QAction("导出图表(&P)", self)
-        # export_plot_action.setShortcut("Ctrl+P")
-        # export_plot_action.setStatusTip("导出当前图表为图片")
-        # export_plot_action.triggered.connect(self.export_plot)
+        export_plot_action.setShortcut("Ctrl+P")
+        export_plot_action.setStatusTip("导出当前图表为图片")
+        export_plot_action.triggered.connect(self.export_plot)
         file_menu.addAction(export_plot_action)
         
         file_menu.addSeparator()
@@ -105,7 +111,7 @@ class MainWindow(QMainWindow):
         self.left_column.panel_changed.connect(self.left_panel.switch_to_panel)
         self.left_column.panel_collapsed.connect(self.left_panel.hide_panel)
         
-        # 连接右侧栏信号到右侧面板
+        # 连接右侧栏信号到右侧面板和图表
         self.right_column.panel_changed.connect(self.right_panel.switch_to_panel)
         self.right_column.panel_changed.connect(self.plot_widget.switch_to_canvas)
         self.right_column.panel_collapsed.connect(self.right_panel.hide_panel)
@@ -123,6 +129,27 @@ class MainWindow(QMainWindow):
         # 设置分割器作为中央部件
         self.setCentralWidget(self.central_splitter)
 
+    def on_panel_changed(self, panel_name):
+        """当面板切换时的处理"""
+        try:
+            # 获取当前面板和面板实例
+            current_panel_name, current_panel_widget = self.right_panel.get_current_panel()
+            
+            # 如果切换到数据记录面板，设置图表更新
+            if panel_name == "data_record" and current_panel_widget:
+                self.plot_widget.start_data_record_updates(current_panel_widget)
+                # 连接数据记录的信号到图表更新
+                if hasattr(current_panel_widget, 'data_record_thread'):
+                    thread = current_panel_widget.data_record_thread
+                    if thread:
+                        # 当数据记录开始时，清空图表
+                        thread.recording_finished.connect(self.plot_widget.stop_data_record_updates)
+            else:
+                # 如果切换到其他面板，停止数据记录图表更新
+                self.plot_widget.stop_data_record_updates()
+                
+        except Exception as e:
+            print(f"面板切换处理时出错: {e}")
 
     def create_status_bar(self):
         """创建状态栏"""
@@ -133,6 +160,30 @@ class MainWindow(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
+        
+    def export_plot(self):
+        """导出当前图表"""
+        try:
+            # 获取保存文件路径
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "保存图表",
+                "plot.png",
+                "PNG文件 (*.png);;JPG文件 (*.jpg);;PDF文件 (*.pdf);;所有文件 (*)"
+            )
+            
+            if file_path:
+                success = self.plot_widget.save_current_plot(file_path)
+                if success:
+                    self.status_bar.showMessage(f"图表已保存: {file_path}")
+                    QMessageBox.information(self, "成功", f"图表已保存到:\n{file_path}")
+                else:
+                    self.status_bar.showMessage("图表保存失败")
+                    QMessageBox.warning(self, "错误", "图表保存失败")
+                    
+        except Exception as e:
+            self.status_bar.showMessage(f"保存图表时出错: {e}")
+            QMessageBox.critical(self, "错误", f"保存图表时出错:\n{e}")
 
     def closeEvent(self, event: QCloseEvent):
         """关闭事件"""
@@ -144,6 +195,21 @@ class MainWindow(QMainWindow):
             QMessageBox.Yes
         )
         if reply == QMessageBox.Yes:
+            # 停止所有数据记录
+            try:
+                current_panel_name, current_panel_widget = self.right_panel.get_current_panel()
+                if (current_panel_name == "data_record" and 
+                    current_panel_widget and 
+                    hasattr(current_panel_widget, 'is_recording') and 
+                    current_panel_widget.is_recording):
+                    current_panel_widget.stop_recording()
+                    
+                # 停止图表更新
+                self.plot_widget.stop_data_record_updates()
+                
+            except Exception as e:
+                print(f"停止数据记录时出错: {e}")
+            
             # 在关闭窗口前清理所有仪器连接
             try:
                 if hasattr(self, 'instruments_control'):
