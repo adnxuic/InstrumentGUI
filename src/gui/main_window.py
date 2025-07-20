@@ -107,6 +107,7 @@ class MainWindow(QMainWindow):
         
         # 连接右侧栏信号到右侧面板
         self.right_column.panel_changed.connect(self.right_panel.switch_to_panel)
+        self.right_column.panel_changed.connect(self.plot_widget.switch_to_canvas)
         self.right_column.panel_collapsed.connect(self.right_panel.hide_panel)
         
         # 添加组件到分割器
