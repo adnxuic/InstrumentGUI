@@ -1,8 +1,10 @@
 *.pyc
 *.log
 *.json
+config/
 history_data/
 temp_data/
-QdMultiVu.log
-QdMultiVu.log.1
+*.log
+QdMultiVu.log*
 config/instruments_config.json
+

@@ -61,6 +61,24 @@ class WF1947:
             "DC": "DC",
             "USER": "USER"
         }
+        
+        # 应用初始设置
+        self.apply_initial_settings()
+
+    def apply_initial_settings(self):
+        """
+        应用初始设置：10mV Vpp，1kHz，正弦波形，0V直流偏置
+        """
+        try:
+            print("正在应用初始设置...")
+            self.set_waveform("SIN")          # 正弦波形
+            self.set_frequency(1000)          # 1kHz频率
+            self.set_amplitude(0.01)          # 10mV Vpp (0.01V)
+            self.set_offset(0)                # 0V直流偏置
+            self.set_output(False)            # 初始关闭输出
+            print("初始设置完成：10mV Vpp，1kHz，正弦波形，0V直流偏置，输出关闭")
+        except Exception as e:
+            print(f"应用初始设置时出错: {e}")
 
     def _write(self, command):
         """Internal method, send command to the specified channel."""
@@ -87,13 +105,13 @@ class WF1947:
         print("Instrument reset.")
 
     def set_output(self, state):
-        """Turn signal output ON or OFF. state: bool (True=ON, False=OFF)"""
+        """Set output state. state: bool (True=ON, False=OFF)"""
         cmd_state = "ON" if state else "OFF"
-        self._write(f'STATe {cmd_state}')
+        self._write(f'OUTPut:STATe {cmd_state}')
         
     def get_output(self):
         """Get output state. Returns 'ON' or 'OFF'."""
-        state = self._query('STATe?')
+        state = self._query('OUTPut:STATe?')
         return 'ON' if state == '1' else 'OFF'
 
     def set_waveform(self, shape="SIN"):
@@ -133,23 +151,29 @@ class WF1947:
         return float(self._query('VOLTage:OFFSet?'))
         
     def set_load(self, impedance_ohm):
-        """Set output load impedance. impedance_ohm: int or 'INF' (high-Z)."""
+        """
+        Set output load impedance. impedance_ohm: int or 'INF' (high-Z).
+        Load impedance: 1 Ω to 10 kΩ, Resolution: 1 Ω
+        Setting example: :OUTPut1:LOAD 50OHM
+        """
         if isinstance(impedance_ohm, str) and impedance_ohm.upper() == 'INF':
             self._write('LOAD INFinity')
         else:
-            self._write(f'LOAD {impedance_ohm}')
+            self._write(f'LOAD {impedance_ohm} OHM')
 
     def get_load(self):
         """Get current load impedance."""
         return self._query('LOAD?')
 
-    def setup_frequency_sweep(self, start_hz, stop_hz, sweep_time_s, spacing='LINear'):
+    def setup_frequency_sweep(self, start_hz, stop_hz, sweep_time_s, spacing='LINear', direction='RAMP', load='INF'):
         """
         Convenience method: configure frequency sweep mode.
         start_hz:       Start frequency (Hz)
         stop_hz:        Stop frequency (Hz)
         sweep_time_s:   Sweep time (seconds)
         spacing:        Sweep spacing, 'LINear' or 'LOGarithmic'
+        direction:      Sweep direction, 'RAMP' or 'TRIangle'
+        load:           Load impedance, int(1-10000) or 'INF'
         """
         print(f"Configuring frequency sweep: {start_hz} Hz -> {stop_hz} Hz in {sweep_time_s}s...")
         self._write('FREQuency:MODE SWEep')
@@ -157,19 +181,23 @@ class WF1947:
         self._write(f'FREQuency:STOP {stop_hz}')
         self._write(f'SWEep:TIME {sweep_time_s}')
         self._write(f'SWEep:SPACing {spacing}')
+        self._write(f'SWEep:INTernal:FUNCtion {direction}')
+        self.set_load(load)
         print("Frequency sweep mode configured.")
 
-    def setup_external_fm(self, carrier_hz, deviation_hz):
+    def setup_external_fm(self, carrier_hz, deviation_hz, load='INF'):
         """
         Convenience method: configure external FM mode.
         carrier_hz:     Carrier frequency (Hz)
         deviation_hz:   Peak frequency deviation (Hz)
+        load:           Load impedance, int(1-10000) or 'INF'
         """
         print(f"Configuring external FM: carrier {carrier_hz} Hz, deviation {deviation_hz} Hz...")
         self._write('FM:STATe ON')
         self._write('FM:SOURce EXTernal')
         self._write(f'FREQuency {carrier_hz}')
         self._write(f'FM:DEViation {deviation_hz}')
+        self.set_load(load)
         print("External FM mode configured.")
 
     def close(self):

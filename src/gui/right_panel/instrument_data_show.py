@@ -124,6 +124,8 @@ class PyInstrumentDataShow(QWidget):
             self.create_sr830_labels(address, data_layout)
         elif instrument_type == "PPMS":
             self.create_ppms_labels(address, data_layout)
+        elif instrument_type == "WF1947":
+            self.create_wf1947_labels(address, data_layout)
         else:
             # 其他仪器类型的默认显示
             label = QLabel("暂不支持该仪器的数据显示")
@@ -207,6 +209,44 @@ class PyInstrumentDataShow(QWidget):
             
             self.data_labels[address][key] = value_label
             
+    def create_wf1947_labels(self, address: str, layout: QGridLayout) -> None:
+        """为WF1947创建数据标签"""
+        self.data_labels[address] = {}
+        
+        # 创建数据标签
+        data_items = [
+            ("waveform", "波形:", "SIN"),
+            ("frequency", "频率 (Hz):", "0.000"),
+            ("amplitude", "幅值 (Vpp):", "0.000"),
+            ("offset", "直流偏置 (V):", "0.000"),
+            ("load", "负载阻抗:", "50 OHM"),
+            ("output", "输出状态:", "OFF")
+        ]
+        
+        for i, (key, label_text, default_value) in enumerate(data_items):
+            # 参数名标签
+            param_label = QLabel(label_text)
+            param_label.setStyleSheet("font-weight: bold; color: #444;")
+            
+            # 数值标签
+            value_label = QLabel(default_value)
+            value_label.setStyleSheet("""
+                QLabel {
+                    background-color: #f0f8f0;
+                    border: 1px solid #d0d0d0;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-family: 'Courier New', monospace;
+                    min-width: 80px;
+                }
+            """)
+            value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            layout.addWidget(param_label, i, 0)
+            layout.addWidget(value_label, i, 1)
+            
+            self.data_labels[address][key] = value_label
+            
     def remove_instrument_group(self, address: str) -> None:
         """移除仪器组"""
         if address in self.instrument_groups:
@@ -240,6 +280,8 @@ class PyInstrumentDataShow(QWidget):
                 self.update_sr830_data(address, instrument)
             elif instrument_type == "PPMS":
                 self.update_ppms_data(address, instrument)
+            elif instrument_type == "WF1947":
+                self.update_wf1947_data(address, instrument)
                 
         except Exception as e:
             self.logger.error(f"更新仪器数据失败 {address}: {e}")
@@ -307,4 +349,72 @@ class PyInstrumentDataShow(QWidget):
                 
         except Exception as e:
             self.logger.error(f"读取PPMS数据失败 {address}: {e}")
+            raise
+            
+    def update_wf1947_data(self, address: str, instrument: Any) -> None:
+        """更新WF1947数据"""
+        try:
+            # 获取WF1947各项数据
+            waveform = instrument.get_waveform()
+            frequency = instrument.get_frequency()
+            amplitude = instrument.get_amplitude() 
+            offset = instrument.get_offset()
+            load = instrument.get_load()
+            output = instrument.get_output()
+            
+            # 更新标签
+            labels = self.data_labels[address]
+            labels["waveform"].setText(str(waveform))
+            labels["frequency"].setText(f"{frequency:.3f}")
+            labels["amplitude"].setText(f"{amplitude:.6f}")
+            labels["offset"].setText(f"{offset:.6f}")
+            labels["load"].setText(str(load))
+            labels["output"].setText(str(output))
+            
+            # 恢复正常样式（清除错误状态）
+            for key, label in labels.items():
+                if key == "output":
+                    # 输出状态使用特殊颜色
+                    if output == "ON":
+                        label.setStyleSheet("""
+                            QLabel {
+                                background-color: #e8f5e8;
+                                border: 1px solid #4caf50;
+                                border-radius: 4px;
+                                padding: 4px 8px;
+                                font-family: 'Courier New', monospace;
+                                min-width: 80px;
+                                color: #2e7d32;
+                                font-weight: bold;
+                            }
+                        """)
+                    else:
+                        label.setStyleSheet("""
+                            QLabel {
+                                background-color: #ffeaea;
+                                border: 1px solid #f44336;
+                                border-radius: 4px;
+                                padding: 4px 8px;
+                                font-family: 'Courier New', monospace;
+                                min-width: 80px;
+                                color: #c62828;
+                                font-weight: bold;
+                            }
+                        """)
+                else:
+                    # 其他标签使用默认样式
+                    label.setStyleSheet("""
+                        QLabel {
+                            background-color: #f0f8f0;
+                            border: 1px solid #d0d0d0;
+                            border-radius: 4px;
+                            padding: 4px 8px;
+                            font-family: 'Courier New', monospace;
+                            min-width: 80px;
+                            color: black;
+                        }
+                    """)
+                
+        except Exception as e:
+            self.logger.error(f"读取WF1947数据失败 {address}: {e}")
             raise
