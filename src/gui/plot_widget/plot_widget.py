@@ -106,6 +106,31 @@ class PyFigureWindow(QFrame):
         except Exception as e:
             print(f"更新图表数据时出错: {e}")
             
+    def start_frequency_sweep_updates(self, freq_sweeper_panel):
+        """开始频率扫描更新"""
+        if self.data_record_timer:
+            self.data_record_timer.stop()
+            
+        self.data_record_timer = QTimer()
+        self.data_record_timer.timeout.connect(
+            lambda: self._update_from_freq_sweeper(freq_sweeper_panel)
+        )
+        self.data_record_timer.start(500)  # 每0.5秒更新一次
+        
+    def _update_from_freq_sweeper(self, freq_sweeper_panel):
+        """从频率扫描面板获取数据并更新图表"""
+        try:
+            plot_data = freq_sweeper_panel.get_data_for_plotting()
+            if plot_data:
+                self.update_frequency_sweep_plots(plot_data)
+        except Exception as e:
+            print(f"更新频率扫描图表数据时出错: {e}")
+            
+    def update_frequency_sweep_plots(self, plot_data):
+        """更新频率扫描图表"""
+        if self.current_panel == "fre_sweeper":
+            self.fre_sweeper_figure_canvas.update_frequency_sweep_plots(plot_data)
+            
     def save_current_plot(self, filename):
         """保存当前图表"""
         current_canvas = self.stacked_layout.currentWidget()

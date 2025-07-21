@@ -248,18 +248,28 @@ class PyFigureCanvas(QWidget):
     def setup_frequency_sweep_plot(self):
         """设置频率扫描图表"""
         self.fig.clear()
-        self.ax1 = self.fig.add_subplot(1, 1, 1)
-        self.ax1.set_title("频率扫描", fontsize=14, fontweight='bold')
-        self.ax1.set_xlabel("频率 (Hz)")
-        self.ax1.set_ylabel("幅度")
+        
+        # 创建两个子图：振幅和相位
+        self.ax1 = self.fig.add_subplot(2, 1, 1)
+        self.ax2 = self.fig.add_subplot(2, 1, 2)
+        
+        # 设置振幅响应图
+        self.ax1.set_title("频率扫描 - 振幅响应", fontsize=12, fontweight='bold')
+        self.ax1.set_ylabel("振幅 (V)")
         self.ax1.grid(True, alpha=0.3)
         
+        # 设置相位响应图
+        self.ax2.set_title("频率扫描 - 相位响应", fontsize=12, fontweight='bold')
+        self.ax2.set_xlabel("频率 (Hz)")
+        self.ax2.set_ylabel("相位 (°)")
+        self.ax2.grid(True, alpha=0.3)
+        
         # 更好的布局
-        self.fig.subplots_adjust(left=0.12, right=0.95, top=0.88, bottom=0.15)
+        self.fig.subplots_adjust(left=0.12, right=0.95, top=0.92, bottom=0.12, hspace=0.45)
         self.canva.draw()
         
     def setup_frequency_tracking_plot(self):
-        """设置频率追踪图表"""
+        """设置共振频率追踪图表"""
         self.fig.clear()
         
         # 创建主轴和副轴
@@ -279,18 +289,78 @@ class PyFigureCanvas(QWidget):
         self.fig.subplots_adjust(left=0.12, right=0.95, top=0.92, bottom=0.12, hspace=0.45)
         self.canva.draw()
         
-    def setup_general_plot(self):
-        """设置通用图表"""
-        self.fig.clear()
-        self.ax1 = self.fig.add_subplot(1, 1, 1)
-        self.ax1.set_title("数据图表", fontsize=14, fontweight='bold')
-        self.ax1.set_xlabel("X轴")
-        self.ax1.set_ylabel("Y轴")
-        self.ax1.grid(True, alpha=0.3)
+    def update_frequency_sweep_plots(self, plot_data):
+        """更新频率扫描图表
         
-        # 更好的布局
-        self.fig.subplots_adjust(left=0.12, right=0.95, top=0.88, bottom=0.15)
-        self.canva.draw()
+        Args:
+            plot_data: 包含频率扫描数据的字典
+                {
+                    'frequency': [...],
+                    'amplitude': [...],
+                    'phase': [...]
+                }
+        """
+        if not plot_data or not plot_data.get('frequency'):
+            return
+            
+        try:
+            frequencies = plot_data['frequency']
+            amplitudes = plot_data['amplitude']
+            phases = plot_data['phase']
+            
+            # 清除之前的图
+            self.ax1.clear()
+            self.ax2.clear()
+            
+            # 绘制振幅响应
+            self.ax1.semilogx(frequencies, amplitudes, 'b-', linewidth=2, marker='o', markersize=3)
+            self.ax1.set_title("频率扫描 - 振幅响应", fontsize=12, fontweight='bold')
+            self.ax1.set_ylabel("振幅 (V)")
+            self.ax1.grid(True, alpha=0.3)
+            
+            # 绘制相位响应
+            self.ax2.semilogx(frequencies, phases, 'r-', linewidth=2, marker='s', markersize=3)
+            self.ax2.set_title("频率扫描 - 相位响应", fontsize=12, fontweight='bold')
+            self.ax2.set_xlabel("频率 (Hz)")
+            self.ax2.set_ylabel("相位 (°)")
+            self.ax2.grid(True, alpha=0.3)
+            
+            # 自动调整范围
+            if len(frequencies) > 0:
+                freq_min, freq_max = min(frequencies), max(frequencies)
+                
+                # 设置频率轴范围（添加一些边距）
+                freq_margin = 0.1 * (freq_max - freq_min)
+                if freq_margin == 0:
+                    freq_margin = freq_min * 0.1 if freq_min > 0 else 1.0
+                    
+                self.ax1.set_xlim(freq_min - freq_margin, freq_max + freq_margin)
+                self.ax2.set_xlim(freq_min - freq_margin, freq_max + freq_margin)
+                
+                # 设置振幅轴范围
+                if len(amplitudes) > 0:
+                    amp_min, amp_max = min(amplitudes), max(amplitudes)
+                    amp_margin = 0.1 * (amp_max - amp_min)
+                    if amp_margin == 0:
+                        amp_margin = max(amp_max * 0.1, 1e-6)
+                    self.ax1.set_ylim(amp_min - amp_margin, amp_max + amp_margin)
+                
+                # 设置相位轴范围
+                if len(phases) > 0:
+                    phase_min, phase_max = min(phases), max(phases)
+                    phase_margin = 0.1 * (phase_max - phase_min)
+                    if phase_margin == 0:
+                        phase_margin = 10.0  # 默认10度边距
+                    self.ax2.set_ylim(phase_min - phase_margin, phase_max + phase_margin)
+            
+            # 更好的布局
+            self.fig.subplots_adjust(left=0.12, right=0.95, top=0.92, bottom=0.12, hspace=0.45)
+            
+            # 重新绘制
+            self.canva.draw()
+            
+        except Exception as e:
+            print(f"更新频率扫描图表时出错: {e}")
 
     def init_set(self):
         # 添加滚动条

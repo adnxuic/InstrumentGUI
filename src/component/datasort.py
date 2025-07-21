@@ -340,6 +340,130 @@ class DataSort:
         self.current_data = []
         self.data_columns = []
         
+    @staticmethod
+    def save_data_to_file(data: List[Dict], filepath: str, data_source: str = "Instrument Data") -> Tuple[bool, str]:
+        """
+        通用数据保存方法，支持多种仪器数据格式
+        
+        Args:
+            data: 要保存的数据列表，每个元素是一个字典
+            filepath: 保存路径
+            data_source: 数据源描述
+            
+        Returns:
+            (success: bool, message: str): 成功状态和消息
+        """
+        try:
+            if not data:
+                return False, "没有数据可保存"
+                
+            # 确保目录存在
+            directory = os.path.dirname(filepath)
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory, exist_ok=True)
+            
+            # 尝试使用MultiPyVu格式保存
+            try:
+                DataSort._save_with_multipyvu_format(data, filepath, data_source)
+                return True, f"数据已保存到: {filepath}"
+            except Exception as mpv_error:
+                # MultiPyVu保存失败，尝试CSV格式
+                try:
+                    import pandas as pd
+                    DataSort._save_as_csv(data, filepath)
+                    return True, f"数据已保存为CSV格式: {filepath}"
+                except ImportError:
+                    # 没有pandas，使用JSON格式
+                    DataSort._save_as_json(data, filepath)
+                    return True, f"数据已保存为JSON格式: {filepath}"
+                except Exception as csv_error:
+                    # CSV也失败，使用JSON作为最后备选
+                    DataSort._save_as_json(data, filepath)
+                    return True, f"数据已保存为JSON格式: {filepath} (CSV保存失败: {csv_error})"
+                    
+        except Exception as e:
+            return False, f"保存数据失败: {e}"
+    
+    @staticmethod
+    def _save_with_multipyvu_format(data: List[Dict], filepath: str, data_source: str):
+        """使用MultiPyVu格式保存数据"""
+        # 创建DataFile实例
+        data_file = mpv.DataFile()
+        
+        # 从第一个数据点推断列结构
+        sample_data = data[0]
+        columns = []
+        
+        # 分析数据结构并创建列名
+        for key, value in sample_data.items():
+            if isinstance(value, dict):
+                # 嵌套字典（如SR830, PPMS数据）
+                for sub_key in value.keys():
+                    columns.append(f"{key}_{sub_key}")
+            else:
+                # 简单值
+                columns.append(key)
+        
+        # 添加列到DataFile
+        data_file.add_multiple_columns(columns)
+        
+        # 创建文件和写入头部
+        data_file.create_file_and_write_header(filepath, data_source)
+        
+        # 写入所有数据点
+        for point in data:
+            # 设置所有列的值
+            for key, value in point.items():
+                if isinstance(value, dict):
+                    # 嵌套字典数据
+                    for sub_key, sub_value in value.items():
+                        column_name = f"{key}_{sub_key}"
+                        data_file.set_value(column_name, sub_value)
+                else:
+                    # 简单值
+                    data_file.set_value(key, value)
+            
+            # 写入这一行数据
+            data_file.write_data()
+    
+    @staticmethod 
+    def _save_as_csv(data: List[Dict], filepath: str):
+        """使用CSV格式保存数据（需要pandas）"""
+        import pandas as pd
+        
+        # 展平嵌套字典
+        flattened_data = []
+        for point in data:
+            flat_point = {}
+            for key, value in point.items():
+                if isinstance(value, dict):
+                    # 嵌套字典数据
+                    for sub_key, sub_value in value.items():
+                        flat_point[f"{key}_{sub_key}"] = sub_value
+                else:
+                    # 简单值
+                    flat_point[key] = value
+            flattened_data.append(flat_point)
+        
+        # 转换为DataFrame并保存
+        df = pd.DataFrame(flattened_data)
+        
+        # 确保文件扩展名为.csv
+        if not filepath.endswith('.csv'):
+            filepath = filepath + '.csv'
+        
+        df.to_csv(filepath, index=False)
+    
+    @staticmethod
+    def _save_as_json(data: List[Dict], filepath: str):
+        """使用JSON格式保存数据"""
+        # 确保文件扩展名为.json
+        if not filepath.endswith('.json'):
+            filepath = filepath + '.json'
+            
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
     def update_data(self, new_data_point: Dict):
         """更新当前数据"""
         self.current_data.append(new_data_point)

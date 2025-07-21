@@ -135,18 +135,27 @@ class MainWindow(QMainWindow):
             # 获取当前面板和面板实例
             current_panel_name, current_panel_widget = self.right_panel.get_current_panel()
             
-            # 如果切换到数据记录面板，设置图表更新
+            # 停止所有现有的更新
+            self.plot_widget.stop_data_record_updates()
+            
+            # 根据面板类型设置相应的图表更新
             if panel_name == "data_record" and current_panel_widget:
                 self.plot_widget.start_data_record_updates(current_panel_widget)
                 # 连接数据记录的信号到图表更新
                 if hasattr(current_panel_widget, 'data_record_thread'):
                     thread = current_panel_widget.data_record_thread
                     if thread:
-                        # 当数据记录开始时，清空图表
+                        # 当数据记录结束时，停止图表更新
                         thread.recording_finished.connect(self.plot_widget.stop_data_record_updates)
-            else:
-                # 如果切换到其他面板，停止数据记录图表更新
-                self.plot_widget.stop_data_record_updates()
+                        
+            elif panel_name == "fre_sweeper" and current_panel_widget:
+                self.plot_widget.start_frequency_sweep_updates(current_panel_widget)
+                # 连接频率扫描的信号到图表更新
+                if hasattr(current_panel_widget, 'sweep_thread'):
+                    thread = current_panel_widget.sweep_thread
+                    if thread:
+                        # 当扫描结束时，停止图表更新
+                        thread.sweep_finished.connect(self.plot_widget.stop_data_record_updates)
                 
         except Exception as e:
             print(f"面板切换处理时出错: {e}")

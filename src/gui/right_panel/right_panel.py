@@ -24,8 +24,8 @@ class PyRightPanel(QFrame):
         # 传递instruments_control到各个组件
         self.instrument_data_show = PyInstrumentDataShow(self.instruments_control)
         self.data_record = PyDataRecord(self.instruments_control)
-        self.fre_sweeper = PyFreSweeper()
-        self.fre_track = PyFreTrack()
+        self.fre_sweeper = PyFreSweeper(self.instruments_control)
+        self.fre_track = PyFreTrack(self.instruments_control)
 
         # 创建堆叠布局
         self.stacked_layout = QStackedLayout(self)
