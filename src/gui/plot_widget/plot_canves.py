@@ -17,7 +17,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 
 class PyFigureCanvas(QWidget):
-    def __init__(self, parent=None, width=8, height=6, dpi=100):
+    def __init__(self, width=8, height=6, dpi=100):
         super().__init__()
 
         # 创建适中大小的figure，让它能适应canvas
@@ -106,9 +106,24 @@ class PyFigureCanvas(QWidget):
                 
                 # 更新轴范围
                 if self.auto_scale and x1_data and y1_data:
-                    self.ax1.set_xlim(min(x1_data), max(x1_data))
-                    margin = 0.1 * (max(y1_data) - min(y1_data)) if max(y1_data) != min(y1_data) else 0.1
-                    self.ax1.set_ylim(min(y1_data) - margin, max(y1_data) + margin)
+                    # 处理x轴范围
+                    x_min, x_max = min(x1_data), max(x1_data)
+                    if x_min == x_max:
+                        # 当只有一个点或所有点x值相同时，设置一个合理的范围
+                        x_range = max(1.0, abs(x_min) * 0.1)  # 设置为绝对值的10%或最小1.0
+                        self.ax1.set_xlim(x_min - x_range, x_max + x_range)
+                    else:
+                        self.ax1.set_xlim(x_min, x_max)
+                    
+                    # 处理y轴范围
+                    y_min, y_max = min(y1_data), max(y1_data)
+                    if y_min == y_max:
+                        # 当所有y值相同时，设置一个合理的范围
+                        y_range = max(0.1, abs(y_min) * 0.1)
+                        self.ax1.set_ylim(y_min - y_range, y_max + y_range)
+                    else:
+                        margin = 0.1 * (y_max - y_min)
+                        self.ax1.set_ylim(y_min - margin, y_max + margin)
             
             # 更新图表2
             if 'plot2' in plot_data and plot_data['plot2']['x'] and plot_data['plot2']['y']:
@@ -124,9 +139,24 @@ class PyFigureCanvas(QWidget):
                 
                 # 更新轴范围
                 if self.auto_scale and x2_data and y2_data:
-                    self.ax2.set_xlim(min(x2_data), max(x2_data))
-                    margin = 0.1 * (max(y2_data) - min(y2_data)) if max(y2_data) != min(y2_data) else 0.1
-                    self.ax2.set_ylim(min(y2_data) - margin, max(y2_data) + margin)
+                    # 处理x轴范围
+                    x_min, x_max = min(x2_data), max(x2_data)
+                    if x_min == x_max:
+                        # 当只有一个点或所有点x值相同时，设置一个合理的范围
+                        x_range = max(1.0, abs(x_min) * 0.1)  # 设置为绝对值的10%或最小1.0
+                        self.ax2.set_xlim(x_min - x_range, x_max + x_range)
+                    else:
+                        self.ax2.set_xlim(x_min, x_max)
+                    
+                    # 处理y轴范围
+                    y_min, y_max = min(y2_data), max(y2_data)
+                    if y_min == y_max:
+                        # 当所有y值相同时，设置一个合理的范围
+                        y_range = max(0.1, abs(y_min) * 0.1)
+                        self.ax2.set_ylim(y_min - y_range, y_max + y_range)
+                    else:
+                        margin = 0.1 * (y_max - y_min)
+                        self.ax2.set_ylim(y_min - margin, y_max + margin)
             
             # 更新轴标签
             if 'settings' in plot_data:

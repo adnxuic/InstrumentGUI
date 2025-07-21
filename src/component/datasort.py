@@ -34,6 +34,12 @@ class DataRecordThread(QThread):
         self.temp_dir = None
         self.temp_files = []
         
+        # PPMS数据缓存机制
+        self.ppms_cache = {}  # 缓存PPMS数据
+        self.ppms_last_read_time = {}  # 记录每个PPMS上次读取时间
+        self.ppms_read_interval = 1.0  # PPMS最小读取间隔（秒）
+        self.ppms_cache_status_reported = {}  # 记录是否已报告缓存状态，避免重复日志
+        
     def set_recording_params(self, time_step: float, max_duration: Optional[float] = None):
         """设置记录参数"""
         self.time_step = time_step
@@ -46,6 +52,11 @@ class DataRecordThread(QThread):
         self.data_points = []
         self.last_temp_save = 0
         self.temp_files = []
+        
+        # 清空PPMS缓存，确保新记录从头开始
+        self.ppms_cache.clear()
+        self.ppms_last_read_time.clear()
+        self.ppms_cache_status_reported.clear()
         
         # 创建临时文件夹
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -60,6 +71,9 @@ class DataRecordThread(QThread):
         
     def run(self):
         """线程主循环"""
+        consecutive_errors = 0
+        max_consecutive_errors = 10  # 允许最大连续错误次数
+        
         try:
             while self.is_recording:
                 current_time = time.time()
@@ -70,27 +84,44 @@ class DataRecordThread(QThread):
                     self.is_recording = False
                     break
                 
-                # 采集数据
-                data_point = self._collect_data(elapsed_time)
-                if data_point:
-                    self.data_points.append(data_point)
-                    self.data_acquired.emit(data_point)
-                    self.time_updated.emit(elapsed_time)
+                try:
+                    # 采集数据
+                    data_point = self._collect_data(elapsed_time)
+                    if data_point:
+                        self.data_points.append(data_point)
+                        self.data_acquired.emit(data_point)
+                        self.time_updated.emit(elapsed_time)
+                        consecutive_errors = 0  # 重置错误计数
+                        
+                        # 检查是否需要保存临时文件
+                        if elapsed_time - self.last_temp_save >= self.temp_save_interval:
+                            self._save_temp_file()
+                            self.last_temp_save = elapsed_time
+                    else:
+                        consecutive_errors += 1
+                        
+                except Exception as data_error:
+                    consecutive_errors += 1
+                    self.error_occurred.emit(f"数据采集出错 (第{consecutive_errors}次): {data_error}")
                     
-                    # 检查是否需要保存临时文件
-                    if elapsed_time - self.last_temp_save >= self.temp_save_interval:
-                        self._save_temp_file()
-                        self.last_temp_save = elapsed_time
+                    # 如果连续错误太多，停止记录
+                    if consecutive_errors >= max_consecutive_errors:
+                        self.error_occurred.emit(f"连续错误达到{max_consecutive_errors}次，停止记录")
+                        self.is_recording = False
+                        break
                 
                 # 等待下一个时间步长
                 time.sleep(self.time_step)
                 
         except Exception as e:
-            self.error_occurred.emit(str(e))
+            self.error_occurred.emit(f"记录线程发生严重错误: {e}")
         finally:
             # 保存最后的临时文件
             if self.data_points:
-                self._save_temp_file()
+                try:
+                    self._save_temp_file()
+                except Exception as save_error:
+                    self.error_occurred.emit(f"保存最终临时文件失败: {save_error}")
             self.recording_finished.emit()
             
     def _collect_data(self, elapsed_time: float) -> Dict:
@@ -117,18 +148,54 @@ class DataRecordThread(QThread):
             
             data_point['SR830'] = sr830_data
             
-            # 采集PPMS数据
+            # 采集PPMS数据（使用缓存机制，最多1秒读取一次）
             ppms_data = {}
+            current_time = time.time()
+            
             for address, instrument in self.instruments_control.instruments_instance.items():
                 if hasattr(instrument, 'type') and instrument.type == "PPMS":
-                    try:
-                        T, sT, F, sF = instrument.get_temperature_field()
-                        ppms_data[f"{address}_temperature"] = T
-                        ppms_data[f"{address}_field"] = F
-                        ppms_data[f"{address}_temp_status"] = sT
-                        ppms_data[f"{address}_field_status"] = sF
-                    except Exception as e:
-                        self.error_occurred.emit(f"PPMS {address} 数据读取错误: {e}")
+                    # 检查是否需要重新读取PPMS数据
+                    last_read = self.ppms_last_read_time.get(address, 0)
+                    time_since_last_read = current_time - last_read
+                    
+                    if time_since_last_read >= self.ppms_read_interval:
+                        # 需要重新读取数据
+                        try:
+                            T, sT, F, sF = instrument.get_temperature_field()
+                            
+                            # 更新缓存
+                            self.ppms_cache[address] = {
+                                'temperature': T,
+                                'field': F,
+                                'temp_status': sT,
+                                'field_status': sF
+                            }
+                            self.ppms_last_read_time[address] = current_time
+                            
+                            # 首次读取时报告缓存机制启用
+                            if address not in self.ppms_cache_status_reported:
+                                # 缓存机制启用（内部状态，无需用户通知）
+                                self.ppms_cache_status_reported[address] = True
+                            
+                        except Exception as e:
+                            # 记录错误但继续处理其他仪器
+                            error_msg = str(e)
+                            if "Incorrect Message ID" in error_msg:
+                                self.error_occurred.emit(f"PPMS {address} 通信错误 (使用缓存数据): Message ID 错误")
+                            else:
+                                self.error_occurred.emit(f"PPMS {address} 数据读取错误: {e}")
+                            
+                            # 如果读取失败且没有缓存数据，跳过这个仪器
+                            if address not in self.ppms_cache:
+                                continue
+                    
+                    # 使用缓存的数据（无论是刚读取的还是之前缓存的）
+                    if address in self.ppms_cache:
+                        cached_data = self.ppms_cache[address]
+                        ppms_data[f"{address}_temperature"] = cached_data['temperature']
+                        ppms_data[f"{address}_field"] = cached_data['field']
+                        ppms_data[f"{address}_temp_status"] = cached_data['temp_status']
+                        ppms_data[f"{address}_field_status"] = cached_data['field_status']
             
             data_point['PPMS'] = ppms_data
             
@@ -156,7 +223,7 @@ class DataRecordThread(QThread):
         except Exception as e:
             self.error_occurred.emit(f"保存临时文件失败: {e}")
             
-    def save_final_data(self, filename: str = None) -> bool:
+    def save_final_data(self, filename: str = None) -> Tuple[bool, str]:
         """保存最终数据文件"""
         try:
             # 确保history_data文件夹存在
@@ -191,14 +258,14 @@ class DataRecordThread(QThread):
                 # 清理临时文件
                 self._cleanup_temp_files()
                 
-                return True
+                return True, filepath
             else:
                 self.error_occurred.emit("没有数据可保存")
-                return False
+                return False, ""
                 
         except Exception as e:
             self.error_occurred.emit(f"保存最终数据失败: {e}")
-            return False
+            return False, ""
             
     def _save_with_multipyvu(self, filepath: str, data: List[Dict]):
         """使用MultiPyVu.DataFile保存数据"""
@@ -212,7 +279,7 @@ class DataRecordThread(QThread):
                 
             # 从第一个数据点推断列结构
             sample_data = data[0]
-            columns = ['time']
+            columns = ['Time (s)']
             
             # 添加SR830列
             for key in sample_data.get('SR830', {}):
@@ -222,26 +289,29 @@ class DataRecordThread(QThread):
             for key in sample_data.get('PPMS', {}):
                 columns.append(f"PPMS_{key}")
             
-            # 设置列标题
-            data_file.create_file_set_columns(filepath, columns)
+            # 添加列到DataFile
+            data_file.add_multiple_columns(columns)
             
-            # 写入数据
+            # 创建文件和写入头部
+            data_file.create_file_and_write_header(filepath, 'Instrument Data Recording')
+            
+            # 写入所有数据点
             for point in data:
-                row = [point['time']]
+                # 设置时间值
+                data_file.set_value('Time (s)', point['time'])
                 
-                # 添加SR830数据
+                # 设置SR830数据
                 sr830_data = point.get('SR830', {})
-                for key in [col[6:] for col in columns if col.startswith('SR830_')]:
-                    row.append(sr830_data.get(key, 0.0))
+                for key, value in sr830_data.items():
+                    data_file.set_value(f"SR830_{key}", value)
                 
-                # 添加PPMS数据
+                # 设置PPMS数据
                 ppms_data = point.get('PPMS', {})
-                for key in [col[5:] for col in columns if col.startswith('PPMS_')]:
-                    row.append(ppms_data.get(key, 0.0))
+                for key, value in ppms_data.items():
+                    data_file.set_value(f"PPMS_{key}", value)
                 
-                data_file.add_data_point(row)
-                
-            data_file.close_file()
+                # 写入这一行数据
+                data_file.write_data()
             
         except Exception as e:
             # 如果MultiPyVu保存失败，使用JSON作为备选

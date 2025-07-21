@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QFileDialog, QLineEdit
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QTextCursor
 
 import sys
 import os
@@ -174,8 +174,9 @@ class PyDataRecord(QWidget):
         """)
         layout.addWidget(self.stop_button)
         
-        self.save_button = QPushButton("保存数据")
+        self.save_button = QPushButton("手动保存")
         self.save_button.setEnabled(False)
+        self.save_button.setToolTip("停止记录时会自动保存，此按钮用于备用保存")
         self.save_button.setStyleSheet("""
             QPushButton {
                 background-color: #2196F3;
@@ -233,6 +234,21 @@ class PyDataRecord(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
+        
+        # 自动保存提示
+        auto_save_info = QLabel("💾 停止记录时将自动保存数据")
+        auto_save_info.setStyleSheet("""
+            QLabel { 
+                color: #666; 
+                font-size: 11px; 
+                padding: 5px;
+                border: 1px solid #ddd;
+                border-radius: 3px;
+                background-color: #f9f9f9;
+            }
+        """)
+        auto_save_info.setWordWrap(True)
+        layout.addWidget(auto_save_info)
         
         group.setLayout(layout)
         parent_layout.addWidget(group)
@@ -368,8 +384,10 @@ class PyDataRecord(QWidget):
             # 启动状态更新定时器
             self.status_timer.start(1000)  # 每秒更新一次
             
-            # 清空数据
+            # 清空数据和重置计数器
             self.data_sort.clear_data()
+            self.count_label.setText("0")
+            self.time_label.setText("00:00:00")
             
             self.add_log(f"开始记录 - 时间步长: {time_step}s, 最大时长: {max_duration or '无限'}s")
             
@@ -383,7 +401,7 @@ class PyDataRecord(QWidget):
             self.data_record_thread.stop_recording()
             
     def save_data(self):
-        """保存数据"""
+        """手动保存数据"""
         if not self.data_record_thread:
             return
             
@@ -392,16 +410,39 @@ class PyDataRecord(QWidget):
             if not filename:
                 filename = None
                 
-            success = self.data_record_thread.save_final_data(filename)
+            success, filepath = self.data_record_thread.save_final_data(filename)
             if success:
-                self.add_log("数据保存成功")
-                QMessageBox.information(self, "成功", "数据已保存到 history_data 文件夹")
+                self.add_log(f"数据保存成功: {filepath}")
+                QMessageBox.information(self, "成功", f"数据已保存到:\n{filepath}")
+                self.save_button.setEnabled(False)  # 保存成功后禁用按钮
             else:
                 self.add_log("数据保存失败")
                 
         except Exception as e:
             self.add_log(f"保存数据时出错: {e}")
             QMessageBox.critical(self, "错误", f"保存数据失败:\n{e}")
+            
+    def _auto_save_data(self):
+        """自动保存数据（无弹窗）"""
+        if not self.data_record_thread:
+            return False
+            
+        try:
+            filename = self.filename_lineedit.text().strip()
+            if not filename:
+                filename = None
+                
+            success, filepath = self.data_record_thread.save_final_data(filename)
+            if success:
+                self.add_log(f"数据自动保存成功: {filepath}")
+                return True
+            else:
+                self.add_log("数据自动保存失败")
+                return False
+                
+        except Exception as e:
+            self.add_log(f"自动保存数据时出错: {e}")
+            return False
             
     def on_unlimited_toggled(self, checked):
         """无限时记录复选框状态改变"""
@@ -423,14 +464,28 @@ class PyDataRecord(QWidget):
         self.is_recording = False
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
-        self.save_button.setEnabled(True)
-        self.status_label.setText("记录完成")
-        self.status_label.setStyleSheet("QLabel { color: #2196F3; font-weight: bold; }")
         
         self.progress_bar.setVisible(False)
         self.status_timer.stop()
         
         self.add_log("记录完成")
+        
+        # 自动保存数据
+        if self.data_record_thread:
+            self.add_log("正在自动保存数据...")
+            success = self._auto_save_data()
+            if success:
+                self.status_label.setText("数据已保存")
+                self.status_label.setStyleSheet("QLabel { color: #4CAF50; font-weight: bold; }")
+                self.save_button.setEnabled(False)  # 已自动保存，禁用手动保存按钮
+            else:
+                self.status_label.setText("保存失败，可手动保存")
+                self.status_label.setStyleSheet("QLabel { color: #f44336; font-weight: bold; }")
+                self.save_button.setEnabled(True)  # 自动保存失败，允许手动保存
+        else:
+            self.status_label.setText("记录完成")
+            self.status_label.setStyleSheet("QLabel { color: #2196F3; font-weight: bold; }")
+            self.save_button.setEnabled(True)
         
     def on_error_occurred(self, error_message):
         """发生错误"""
@@ -462,7 +517,7 @@ class PyDataRecord(QWidget):
         
         # 自动滚动到底部
         cursor = self.log_text.textCursor()
-        cursor.movePosition(cursor.End)
+        cursor.movePosition(QTextCursor.MoveOperation.End)
         self.log_text.setTextCursor(cursor)
         
     def clear_log(self):

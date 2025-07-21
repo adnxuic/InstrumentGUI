@@ -6,6 +6,6 @@ QFrame#left_column
 
 QFrame#right_column
 {
-    background-color: #e85500;
+    background-color: #f8f5f3;
 }
 
