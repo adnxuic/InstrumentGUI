@@ -179,15 +179,20 @@ class DataRecordThread(QThread):
                                 self.ppms_cache_status_reported[address] = True
                             
                         except Exception as e:
-                            # 记录错误但继续处理其他仪器
+                            # 改进的错误处理
                             error_msg = str(e)
-                            if "Incorrect Message ID" in error_msg:
-                                self.error_occurred.emit(f"PPMS {address} 通信错误 (使用缓存数据): Message ID 错误")
+                            
+                            # 检查是否是socket相关错误
+                            if any(keyword in error_msg.lower() for keyword in ['socket', 'recv', 'connection', 'timeout']):
+                                self.error_occurred.emit(f"PPMS {address} Socket连接错误 (将使用缓存数据): {error_msg[:100]}...")
+                            elif "Incorrect Message ID" in error_msg:
+                                self.error_occurred.emit(f"PPMS {address} 通信协议错误 (将使用缓存数据): Message ID不匹配")
                             else:
-                                self.error_occurred.emit(f"PPMS {address} 数据读取错误: {e}")
+                                self.error_occurred.emit(f"PPMS {address} 数据读取错误 (将使用缓存数据): {error_msg[:100]}")
                             
                             # 如果读取失败且没有缓存数据，跳过这个仪器
                             if address not in self.ppms_cache:
+                                self.error_occurred.emit(f"PPMS {address} 无可用数据，跳过此次采集")
                                 continue
                     
                     # 使用缓存的数据（无论是刚读取的还是之前缓存的）
