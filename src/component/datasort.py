@@ -137,12 +137,13 @@ class DataRecordThread(QThread):
             for address, instrument in self.instruments_control.instruments_instance.items():
                 if hasattr(instrument, 'type') and instrument.type == "SR830":
                     try:
-                        # 使用SNAP命令同时获取X, Y, R, θ
-                        snap_data = instrument.getSnap(1, 2, 3, 4)  # X, Y, R, θ
+                        # 使用SNAP命令同时获取X, Y, R, θ, frequency
+                        snap_data = instrument.getSnap(1, 2, 3, 4, 9)  # X, Y, R, θ, frequency
                         sr830_data[f"{address}_X"] = snap_data[0]
                         sr830_data[f"{address}_Y"] = snap_data[1] 
                         sr830_data[f"{address}_R"] = snap_data[2]
                         sr830_data[f"{address}_theta"] = snap_data[3]
+                        sr830_data[f"{address}_frequency"] = snap_data[4]
                     except Exception as e:
                         self.error_occurred.emit(f"SR830 {address} 数据读取错误: {e}")
             

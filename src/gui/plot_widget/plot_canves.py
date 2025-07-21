@@ -197,7 +197,8 @@ class PyFigureCanvas(QWidget):
                     'X': 'X分量 (V)',
                     'Y': 'Y分量 (V)', 
                     'R': '幅度 R (V)',
-                    'theta': '相位 θ (°)'
+                    'theta': '相位 θ (°)',
+                    'frequency': '频率 (Hz)'
                 }
                 return f"{instrument} - {param_names.get(param, param)}"
         elif column_name.startswith('PPMS_'):

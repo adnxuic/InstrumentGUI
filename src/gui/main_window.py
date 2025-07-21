@@ -59,29 +59,12 @@ class MainWindow(QMainWindow):
         # 文件菜单
         file_menu = menubar.addMenu("文件(&F)")
         
-        # 导出数据动作
-        export_stokes_action = QAction("导出参数(&S)", self)
-        # export_stokes_action.setShortcut("Ctrl+S")
-        # export_stokes_action.setStatusTip("导出斯托克斯参数到CSV文件")
-        # export_stokes_action.triggered.connect(self.export_stokes_data)
-        file_menu.addAction(export_stokes_action)
-        
-        export_plot_action = QAction("导出图表(&P)", self)
-        export_plot_action.setShortcut("Ctrl+P")
-        export_plot_action.setStatusTip("导出当前图表为图片")
-        export_plot_action.triggered.connect(self.export_plot)
-        file_menu.addAction(export_plot_action)
-        
-        file_menu.addSeparator()
-        
         # 退出动作
         exit_action = QAction("退出(&Q)", self)
         exit_action.setShortcut("Ctrl+Q")
         exit_action.setStatusTip("退出应用程序")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
-
-        
 
         # 编辑菜单
         edit_menu = menubar.addMenu("编辑(&E)")
@@ -169,30 +152,6 @@ class MainWindow(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
-        
-    def export_plot(self):
-        """导出当前图表"""
-        try:
-            # 获取保存文件路径
-            file_path, _ = QFileDialog.getSaveFileName(
-                self,
-                "保存图表",
-                "plot.png",
-                "PNG文件 (*.png);;JPG文件 (*.jpg);;PDF文件 (*.pdf);;所有文件 (*)"
-            )
-            
-            if file_path:
-                success = self.plot_widget.save_current_plot(file_path)
-                if success:
-                    self.status_bar.showMessage(f"图表已保存: {file_path}")
-                    QMessageBox.information(self, "成功", f"图表已保存到:\n{file_path}")
-                else:
-                    self.status_bar.showMessage("图表保存失败")
-                    QMessageBox.warning(self, "错误", "图表保存失败")
-                    
-        except Exception as e:
-            self.status_bar.showMessage(f"保存图表时出错: {e}")
-            QMessageBox.critical(self, "错误", f"保存图表时出错:\n{e}")
 
     def closeEvent(self, event: QCloseEvent):
         """关闭事件"""

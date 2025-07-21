@@ -35,9 +35,10 @@ class SR830:
 				  a string found in .oflt.keys() and i=0..26. Providing "name" will superceed "i." 
 				  Default is to set IT to 1sec. 
 	.getSens():		Returns a string containing the unit converted sensitivity (contrast with .v)
-	.setSync(i):		Allows sync filtering to be turned on or off (i=1 or 0)
+	.setSync(i):	Allows sync filtering to be turned on or off (i=1 or 0)
 	.getSync():		Returns a string specifying if the sync filter is on or off
 	.getFreq():		Returns a float with the current sync frequency in Hz
+	.getFreSou:		Returns the reference source: The parameter i selects internal (i=1) or external (i=0).
 	.getOut(i):		Returns a float with the measured locked in frequency component: X, Y, R or Phase (i=1,2,3,4)
 	.getRTh():		Returns a numpy array with measured locked in amplitude and phase: [R(V),Th(Deg)]
 	.getXY():		Returns a numpy array with measured locked in X and Y components: [X(V),X(Deg)]
@@ -154,6 +155,13 @@ class SR830:
 	
 	def getFreq(self):
 		return(float(self.inst.query("FREQ ?")))
+
+	def getFreSou(self):
+		"""
+		Internal: 1
+		External: 0
+		"""
+		return(["External","Internal"][int(self.inst.query("FMOD ?")[:-1])])
 		
 	def getOut(self,i=3):
 		"""

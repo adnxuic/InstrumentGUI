@@ -56,12 +56,6 @@ class FrequencySweepThread(QThread):
             self.wf1947.set_amplitude(self.sweep_params['amplitude'])
             self.wf1947.set_offset(self.sweep_params['offset'])
             
-            # 设置SR830参数
-            if 'sensitivity' in self.sweep_params:
-                self.sr830.setSens(name=self.sweep_params['sensitivity'])
-            if 'time_constant' in self.sweep_params:
-                self.sr830.setIT(name=self.sweep_params['time_constant'])
-            
             # 配置WF1947频率扫描
             self.wf1947.setup_frequency_sweep(
                 start_hz=start_hz,
@@ -192,9 +186,6 @@ class PyFreSweeper(QWidget):
         
         # WF1947和扫描参数设置组（合并）
         self.create_wf1947_and_sweep_group(layout)
-        
-        # SR830设置组
-        self.create_sr830_settings_group(layout)
         
         # 数据保存设置组
         self.create_save_settings_group(layout)
@@ -362,40 +353,6 @@ class PyFreSweeper(QWidget):
         self.sample_interval_spinbox.setMaximumHeight(22)
         self.sample_interval_spinbox.setMaximumWidth(120)
         layout.addRow("采样间隔:", self.sample_interval_spinbox)
-        
-        group.setLayout(layout)
-        parent_layout.addWidget(group)
-        
-    def create_sr830_settings_group(self, parent_layout):
-        """创建SR830设置组"""
-        group = QGroupBox("SR830参数")
-        group.setStyleSheet("QGroupBox { font-weight: bold; padding-top: 8px; font-size: 10px; }")
-        layout = QFormLayout()
-        layout.setSpacing(2)
-        layout.setContentsMargins(3, 3, 3, 3)
-        
-        # 灵敏度设置
-        self.sensitivity_combo = QComboBox()
-        self.sensitivity_combo.addItems([
-            "2nV", "5nV", "10nV", "20nV", "50nV", "100nV", "200nV", "500nV",
-            "1uV", "2uV", "5uV", "10uV", "20uV", "50uV", "100uV", "200uV", "500uV",
-            "1mV", "2mV", "5mV", "10mV", "20mV", "50mV", "100mV", "200mV", "500mV", "1V"
-        ])
-        self.sensitivity_combo.setCurrentText("10mV")
-        self.sensitivity_combo.setMaximumHeight(22)
-        self.sensitivity_combo.setMaximumWidth(80)
-        layout.addRow("灵敏度:", self.sensitivity_combo)
-        
-        # 时间常数设置
-        self.time_constant_combo = QComboBox()
-        self.time_constant_combo.addItems([
-            "10us", "30us", "100us", "300us", "1ms", "3ms", "10ms", "30ms", 
-            "100ms", "300ms", "1s", "3s", "10s", "30s", "100s", "300s"
-        ])
-        self.time_constant_combo.setCurrentText("100ms")
-        self.time_constant_combo.setMaximumHeight(22)
-        self.time_constant_combo.setMaximumWidth(80)
-        layout.addRow("时间常数:", self.time_constant_combo)
         
         group.setLayout(layout)
         parent_layout.addWidget(group)
@@ -656,10 +613,6 @@ class PyFreSweeper(QWidget):
             'sweep_time_s': self.sweep_time_spinbox.value(),
             'spacing': self.spacing_combo.currentText(),
             'direction': self.direction_combo.currentText(),
-            
-            # SR830参数
-            'sensitivity': self.sensitivity_combo.currentText(),
-            'time_constant': self.time_constant_combo.currentText(),
             
             # 数据采样参数
             'sample_interval': self.sample_interval_spinbox.value()

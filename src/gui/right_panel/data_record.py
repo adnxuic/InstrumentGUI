@@ -310,7 +310,8 @@ class PyDataRecord(QWidget):
             if hasattr(instrument, 'type') and instrument.type == "SR830":
                 options.extend([
                     f"SR830_{address}_X", f"SR830_{address}_Y",
-                    f"SR830_{address}_R", f"SR830_{address}_theta"
+                    f"SR830_{address}_R", f"SR830_{address}_theta",
+                    f"SR830_{address}_frequency"
                 ])
         
         # 添加PPMS选项

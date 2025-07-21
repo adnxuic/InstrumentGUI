@@ -14,6 +14,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from instruments.instrumentscontrol import InstrumentsControl
+from instruments.sr830 import SR830
 
 
 class PyInstrumentDataShow(QWidget):
@@ -148,7 +149,9 @@ class PyInstrumentDataShow(QWidget):
             ("X", "X (V):", "0.000"),
             ("Y", "Y (V):", "0.000"),
             ("R", "R (V):", "0.000"),
-            ("theta", "θ (°):", "0.000")
+            ("theta", "θ (°):", "0.000"),
+            ("frequency", "频率 (Hz):", "0.000"),
+            ("reference", "参考源:", "Internal")
         ]
         
         for i, (key, label_text, default_value) in enumerate(data_items):
@@ -290,12 +293,16 @@ class PyInstrumentDataShow(QWidget):
                 label.setText("Error")
                 label.setStyleSheet(label.styleSheet() + "color: red;")
                 
-    def update_sr830_data(self, address: str, instrument: Any) -> None:
+    def update_sr830_data(self, address: str, instrument: SR830) -> None:
         """更新SR830数据"""
         try:
             # 获取X, Y, R, theta数据
             xy_data: NDArray = instrument.getXY()  # 返回[X, Y]
             rth_data: NDArray = instrument.getRTh()  # 返回[R, theta]
+            
+            # 获取频率和参考源数据
+            frequency = instrument.getFreq()
+            reference_source = instrument.getFreSou()
             
             # 更新标签
             labels = self.data_labels[address]
@@ -303,20 +310,52 @@ class PyInstrumentDataShow(QWidget):
             labels["Y"].setText(f"{xy_data[1]:.6f}")
             labels["R"].setText(f"{rth_data[0]:.6f}")
             labels["theta"].setText(f"{rth_data[1]:.3f}")
+            labels["frequency"].setText(f"{frequency:.3f}")
+            labels["reference"].setText(str(reference_source))
             
             # 恢复正常样式（清除错误状态）
-            for label in labels.values():
-                label.setStyleSheet("""
-                    QLabel {
-                        background-color: #f0f8f0;
-                        border: 1px solid #d0d0d0;
-                        border-radius: 4px;
-                        padding: 4px 8px;
-                        font-family: 'Courier New', monospace;
-                        min-width: 80px;
-                        color: black;
-                    }
-                """)
+            for key, label in labels.items():
+                if key == "reference":
+                    # 参考源标签使用特殊样式
+                    if reference_source == "Internal":
+                        label.setStyleSheet("""
+                            QLabel {
+                                background-color: #e8f5e8;
+                                border: 1px solid #4caf50;
+                                border-radius: 4px;
+                                padding: 4px 8px;
+                                font-family: 'Courier New', monospace;
+                                min-width: 80px;
+                                color: #2e7d32;
+                                font-weight: bold;
+                            }
+                        """)
+                    else:
+                        label.setStyleSheet("""
+                            QLabel {
+                                background-color: #e8f4f8;
+                                border: 1px solid #2196f3;
+                                border-radius: 4px;
+                                padding: 4px 8px;
+                                font-family: 'Courier New', monospace;
+                                min-width: 80px;
+                                color: #1976d2;
+                                font-weight: bold;
+                            }
+                        """)
+                else:
+                    # 其他标签使用默认样式
+                    label.setStyleSheet("""
+                        QLabel {
+                            background-color: #f0f8f0;
+                            border: 1px solid #d0d0d0;
+                            border-radius: 4px;
+                            padding: 4px 8px;
+                            font-family: 'Courier New', monospace;
+                            min-width: 80px;
+                            color: black;
+                        }
+                    """)
                 
         except Exception as e:
             self.logger.error(f"读取SR830数据失败 {address}: {e}")
