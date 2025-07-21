@@ -92,12 +92,17 @@ class FrequencySweepThread(QThread):
                 if elapsed_time > sweep_time_s:
                     break
                 
-                # 估算当前频率（基于扫描进度）
-                progress = elapsed_time / sweep_time_s
-                if spacing == 'LINear':
-                    current_freq = start_hz + (stop_hz - start_hz) * progress
-                else:  # LOGarithmic
-                    current_freq = start_hz * ((stop_hz / start_hz) ** progress)
+                # 从SR830读取当前频率
+                try:
+                    current_freq = self.sr830.getFreq()
+                except Exception as e:
+                    # 如果读取失败，使用基于时间进度的估算作为备用
+                    progress = elapsed_time / sweep_time_s
+                    if spacing == 'LINear':
+                        current_freq = start_hz + (stop_hz - start_hz) * progress
+                    else:  # LOGarithmic
+                        current_freq = start_hz * ((stop_hz / start_hz) ** progress)
+                    print(f"警告: 无法从SR830读取频率，使用估算值: {e}")
                 
                 # 读取SR830数据
                 xy_data = self.sr830.getXY()  # [X, Y]
