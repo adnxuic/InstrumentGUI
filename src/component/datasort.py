@@ -34,12 +34,6 @@ class DataRecordThread(QThread):
         self.temp_dir = None
         self.temp_files = []
         
-        # PPMS数据缓存机制
-        self.ppms_cache = {}  # 缓存PPMS数据
-        self.ppms_last_read_time = {}  # 记录每个PPMS上次读取时间
-        self.ppms_read_interval = 1.0  # PPMS最小读取间隔（秒）
-        self.ppms_cache_status_reported = {}  # 记录是否已报告缓存状态，避免重复日志
-        
     def set_recording_params(self, time_step: float, max_duration: Optional[float] = None):
         """设置记录参数"""
         self.time_step = time_step
@@ -52,11 +46,6 @@ class DataRecordThread(QThread):
         self.data_points = []
         self.last_temp_save = 0
         self.temp_files = []
-        
-        # 清空PPMS缓存，确保新记录从头开始
-        self.ppms_cache.clear()
-        self.ppms_last_read_time.clear()
-        self.ppms_cache_status_reported.clear()
         
         # 创建临时文件夹
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -149,59 +138,33 @@ class DataRecordThread(QThread):
             
             data_point['SR830'] = sr830_data
             
-            # 采集PPMS数据（使用缓存机制，最多1秒读取一次）
+            # 采集PPMS数据（直接读取，无缓存）
             ppms_data = {}
-            current_time = time.time()
             
             for address, instrument in self.instruments_control.instruments_instance.items():
                 if hasattr(instrument, 'type') and instrument.type == "PPMS":
-                    # 检查是否需要重新读取PPMS数据
-                    last_read = self.ppms_last_read_time.get(address, 0)
-                    time_since_last_read = current_time - last_read
-                    
-                    if time_since_last_read >= self.ppms_read_interval:
-                        # 需要重新读取数据
-                        try:
-                            T, sT, F, sF = instrument.get_temperature_field()
-                            
-                            # 更新缓存
-                            self.ppms_cache[address] = {
-                                'temperature': T,
-                                'field': F,
-                                'temp_status': sT,
-                                'field_status': sF
-                            }
-                            self.ppms_last_read_time[address] = current_time
-                            
-                            # 首次读取时报告缓存机制启用
-                            if address not in self.ppms_cache_status_reported:
-                                # 缓存机制启用（内部状态，无需用户通知）
-                                self.ppms_cache_status_reported[address] = True
-                            
-                        except Exception as e:
-                            # 改进的错误处理
-                            error_msg = str(e)
-                            
-                            # 检查是否是socket相关错误
-                            if any(keyword in error_msg.lower() for keyword in ['socket', 'recv', 'connection', 'timeout']):
-                                self.error_occurred.emit(f"PPMS {address} Socket连接错误 (将使用缓存数据): {error_msg[:100]}...")
-                            elif "Incorrect Message ID" in error_msg:
-                                self.error_occurred.emit(f"PPMS {address} 通信协议错误 (将使用缓存数据): Message ID不匹配")
-                            else:
-                                self.error_occurred.emit(f"PPMS {address} 数据读取错误 (将使用缓存数据): {error_msg[:100]}")
-                            
-                            # 如果读取失败且没有缓存数据，跳过这个仪器
-                            if address not in self.ppms_cache:
-                                self.error_occurred.emit(f"PPMS {address} 无可用数据，跳过此次采集")
-                                continue
-                    
-                    # 使用缓存的数据（无论是刚读取的还是之前缓存的）
-                    if address in self.ppms_cache:
-                        cached_data = self.ppms_cache[address]
-                        ppms_data[f"{address}_temperature"] = cached_data['temperature']
-                        ppms_data[f"{address}_field"] = cached_data['field']
-                        ppms_data[f"{address}_temp_status"] = cached_data['temp_status']
-                        ppms_data[f"{address}_field_status"] = cached_data['field_status']
+                    try:
+                        T, sT, F, sF = instrument.get_temperature_field()
+                        
+                        ppms_data[f"{address}_temperature"] = T
+                        ppms_data[f"{address}_field"] = F
+                        ppms_data[f"{address}_temp_status"] = sT
+                        ppms_data[f"{address}_field_status"] = sF
+                        
+                    except Exception as e:
+                        # 简化的错误处理
+                        error_msg = str(e)
+                        
+                        # 检查是否是socket相关错误
+                        if any(keyword in error_msg.lower() for keyword in ['socket', 'recv', 'connection', 'timeout']):
+                            self.error_occurred.emit(f"PPMS {address} Socket连接错误: {error_msg[:100]}...")
+                        elif "Incorrect Message ID" in error_msg:
+                            self.error_occurred.emit(f"PPMS {address} 通信协议错误: Message ID不匹配")
+                        else:
+                            self.error_occurred.emit(f"PPMS {address} 数据读取错误: {error_msg[:100]}")
+                        
+                        # 跳过此次采集
+                        continue
             
             data_point['PPMS'] = ppms_data
             
