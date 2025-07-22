@@ -15,6 +15,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from instruments.instrumentscontrol import InstrumentsControl
 from instruments.sr830 import SR830
+from instruments.ppms import PPMS
 
 
 class PyInstrumentDataShow(QWidget):
@@ -296,21 +297,19 @@ class PyInstrumentDataShow(QWidget):
     def update_sr830_data(self, address: str, instrument: SR830) -> None:
         """更新SR830数据"""
         try:
-            # 获取X, Y, R, theta数据
-            xy_data: NDArray = instrument.getXY()  # 返回[X, Y]
-            rth_data: NDArray = instrument.getRTh()  # 返回[R, theta]
+            # 获取X, Y, R, theta和frequency数据
+            xyrthfreq_data: NDArray = instrument.getSnap(1, 2, 3, 4, 9)  # 返回[X, Y, R, theta, frequency]
             
-            # 获取频率和参考源数据
-            frequency = instrument.getFreq()
+            # 参考源数据
             reference_source = instrument.getFreSou()
             
             # 更新标签
             labels = self.data_labels[address]
-            labels["X"].setText(f"{xy_data[0]:.6f}")
-            labels["Y"].setText(f"{xy_data[1]:.6f}")
-            labels["R"].setText(f"{rth_data[0]:.6f}")
-            labels["theta"].setText(f"{rth_data[1]:.3f}")
-            labels["frequency"].setText(f"{frequency:.3f}")
+            labels["X"].setText(f"{xyrthfreq_data[0]:.6f}")
+            labels["Y"].setText(f"{xyrthfreq_data[1]:.6f}")
+            labels["R"].setText(f"{xyrthfreq_data[2]:.6f}")
+            labels["theta"].setText(f"{xyrthfreq_data[3]:.3f}")
+            labels["frequency"].setText(f"{xyrthfreq_data[4]:.3f}")
             labels["reference"].setText(str(reference_source))
             
             # 恢复正常样式（清除错误状态）
@@ -361,7 +360,7 @@ class PyInstrumentDataShow(QWidget):
             self.logger.error(f"读取SR830数据失败 {address}: {e}")
             raise
             
-    def update_ppms_data(self, address: str, instrument: Any) -> None:
+    def update_ppms_data(self, address: str, instrument: PPMS) -> None:
         """更新PPMS数据"""
         try:
             # 获取温度和磁场数据
