@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from instruments.instrumentscontrol import InstrumentsControl
 from instruments.sr830 import SR830
 from instruments.ppms import PPMS
-
+from instruments.wf1947 import WF1947
 
 class PyInstrumentDataShow(QWidget):
     def __init__(self, instruments_control: InstrumentsControl) -> None:
@@ -541,7 +541,7 @@ class PyInstrumentDataShow(QWidget):
             self.logger.error(f"读取PPMS数据失败 {address}: {e}")
             raise
             
-    def update_wf1947_data(self, address: str, instrument: Any) -> None:
+    def update_wf1947_data(self, address: str, instrument: WF1947) -> None:
         """更新WF1947数据"""
         try:
             # 获取WF1947各项数据

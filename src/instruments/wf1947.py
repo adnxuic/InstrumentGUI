@@ -93,7 +93,7 @@ class WF1947:
         """Internal method, query information from the specified channel."""
         if command.upper().startswith(('FREQ', 'VOLT', 'PHAS', 'FUNC', 'SWE', 'FM', 'PM', 'AM', 'BURS')):
             return self.inst.query(f'SOURce{self.channel}:{command}').strip()
-        elif command.upper().startswith(('OUTP', 'LOAD')):
+        elif command.upper().startswith(('LOAD')):
             return self.inst.query(f'OUTPut{self.channel}:{command}').strip()
         else:
             return self.inst.query(command).strip()

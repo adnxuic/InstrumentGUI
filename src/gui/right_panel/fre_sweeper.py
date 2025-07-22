@@ -86,9 +86,19 @@ class FrequencySweepThread(QThread):
                 if elapsed_time > sweep_time_s:
                     break
                 
-                # 从SR830读取当前频率
+                # 从SR830读取数据
                 try:
-                    current_freq = self.sr830.getFreq()
+                    snap_data = self.sr830.getSnap(1, 2, 3, 4, 9)
+                    # 构建数据点
+                    data_point = {
+                        'frequency': snap_data[4],
+                        'X': snap_data[0],
+                        'Y': snap_data[1], 
+                        'R': snap_data[2],
+                        'theta': snap_data[3],
+                        'timestamp': time.time(),
+                        'elapsed_time': elapsed_time
+                    }
                 except Exception as e:
                     # 如果读取失败，使用基于时间进度的估算作为备用
                     progress = elapsed_time / sweep_time_s
@@ -96,22 +106,17 @@ class FrequencySweepThread(QThread):
                         current_freq = start_hz + (stop_hz - start_hz) * progress
                     else:  # LOGarithmic
                         current_freq = start_hz * ((stop_hz / start_hz) ** progress)
-                    print(f"警告: 无法从SR830读取频率，使用估算值: {e}")
-                
-                # 读取SR830数据
-                xy_data = self.sr830.getXY()  # [X, Y]
-                rth_data = self.sr830.getRTh()  # [R, theta]
-                
-                # 构建数据点
-                data_point = {
-                    'frequency': current_freq,
-                    'X': xy_data[0],
-                    'Y': xy_data[1], 
-                    'R': rth_data[0],
-                    'theta': rth_data[1],
-                    'timestamp': time.time(),
-                    'elapsed_time': elapsed_time
-                }
+                    # 构建备用数据点
+                    data_point = {
+                        'frequency': current_freq,
+                        'X': 0.0,
+                        'Y': 0.0, 
+                        'R': 0.0,
+                        'theta': 0.0,
+                        'timestamp': time.time(),
+                        'elapsed_time': elapsed_time
+                    }
+                    print(f"警告: 无法从SR830读取数据")
                 
                 self.sweep_data.append(data_point)
                 
@@ -267,8 +272,8 @@ class PyFreSweeper(QWidget):
         
         # 幅度设置
         self.amplitude_spinbox = QDoubleSpinBox()
-        self.amplitude_spinbox.setRange(0.001, 10.0)
-        self.amplitude_spinbox.setValue(0.1)
+        self.amplitude_spinbox.setRange(0.001, 1.0)
+        self.amplitude_spinbox.setValue(0.01)
         self.amplitude_spinbox.setSuffix(" V")
         self.amplitude_spinbox.setDecimals(3)
         self.amplitude_spinbox.setMaximumHeight(22)
