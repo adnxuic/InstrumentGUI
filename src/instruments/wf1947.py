@@ -176,6 +176,7 @@ class WF1947:
         load:           Load impedance, int(1-10000) or 'INF'
         """
         print(f"Configuring frequency sweep: {start_hz} Hz -> {stop_hz} Hz in {sweep_time_s}s...")
+        # self._write('SWEep:MODE SINGle') # set single sweeper
         self._write('FREQuency:MODE SWEep')
         self._write(f'FREQuency:STARt {start_hz}')
         self._write(f'FREQuency:STOP {stop_hz}')
@@ -199,6 +200,12 @@ class WF1947:
         self._write(f'FM:DEViation {deviation_hz}')
         self.set_load(load)
         print("External FM mode configured.")
+
+    def trigger(self):
+        """
+        emit a trg
+        """
+        self.inst.write('*TRG')
 
     def close(self):
         """Close the connection to the instrument."""

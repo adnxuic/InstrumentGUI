@@ -73,35 +73,28 @@ class FrequencySweepThread(QThread):
             total_samples = int(sweep_time_s / sample_interval)
             
             # 在扫描过程中采样数据
-            start_time = time.time()
-            for i in range(total_samples):
-                if not self.running:
-                    break
-                    
-                # 等待采样间隔
-                time.sleep(sample_interval)
-                
-                # 计算当前扫描进度
-                elapsed_time = time.time() - start_time
-                if elapsed_time > sweep_time_s:
-                    break
+            start_time = time.perf_counter()
+            i = 0
+            while time.perf_counter() - start_time < sweep_time_s and self.running and self.wf1947.get_frequency() <= stop_hz:
+                o_time = time.perf_counter()
                 
                 # 从SR830读取数据
                 try:
-                    snap_data = self.sr830.getSnap(1, 2, 3, 4, 9)
+                    frequency_data = self.wf1947.get_frequency()
+                    snap_data = self.sr830.getSnap(1, 2, 3, 4)
                     # 构建数据点
                     data_point = {
-                        'frequency': snap_data[4],
+                        'frequency': frequency_data,
                         'X': snap_data[0],
                         'Y': snap_data[1], 
                         'R': snap_data[2],
                         'theta': snap_data[3],
                         'timestamp': time.time(),
-                        'elapsed_time': elapsed_time
+                        'elapsed_time': time.perf_counter() - start_time
                     }
                 except Exception as e:
                     # 如果读取失败，使用基于时间进度的估算作为备用
-                    progress = elapsed_time / sweep_time_s
+                    progress = (time.perf_counter() - start_time) / sweep_time_s
                     if spacing == 'LINear':
                         current_freq = start_hz + (stop_hz - start_hz) * progress
                     else:  # LOGarithmic
@@ -114,7 +107,7 @@ class FrequencySweepThread(QThread):
                         'R': 0.0,
                         'theta': 0.0,
                         'timestamp': time.time(),
-                        'elapsed_time': elapsed_time
+                        'elapsed_time': time.perf_counter() - start_time
                     }
                     print(f"警告: 无法从SR830读取数据")
                 
@@ -123,9 +116,15 @@ class FrequencySweepThread(QThread):
                 # 发射数据信号
                 self.data_acquired.emit(data_point)
                 self.progress_updated.emit(i + 1, total_samples)
+                i += 1
+                # 等待采样间隔
+                time.sleep(max(0, sample_interval-(time.perf_counter()-o_time)))
                 
             # 关闭输出
             self.wf1947.set_output(False)
+
+            # 重置WF1947
+            self.wf1947.reset()
             
             # 发射完成信号
             if self.running:
@@ -151,6 +150,10 @@ class FrequencySweepThread(QThread):
 
 class PyFreSweeper(QWidget):
     """频率扫描面板"""
+    
+    # 信号定义，用于控制仪器显示面板的启停
+    request_stop_display = Signal()  # 请求停止仪器显示更新
+    request_start_display = Signal()  # 请求开始仪器显示更新
     
     def __init__(self, instruments_control=None):
         super().__init__()
@@ -659,6 +662,9 @@ class PyFreSweeper(QWidget):
             # 开始扫描
             self.sweep_thread.start()
             
+            # 请求停止仪器显示面板更新，避免数据读取冲突
+            self.request_stop_display.emit()
+            
             # 更新UI状态
             self.is_sweeping = True
             self.start_button.setEnabled(False)
@@ -675,6 +681,7 @@ class PyFreSweeper(QWidget):
             self.progress_label.setText(f"0/{total_samples}")
             
             self.add_log(f"开始频率扫描: {sweep_params['start_hz']:.3f} Hz → {sweep_params['stop_hz']:.3f} Hz, {sweep_params['sweep_time_s']:.1f}s")
+            self.add_log("已暂停仪器显示更新，避免数据读取冲突")
             
         except Exception as e:
             self.add_log(f"启动扫描失败: {e}")
@@ -685,6 +692,24 @@ class PyFreSweeper(QWidget):
         if self.sweep_thread and self.is_sweeping:
             self.sweep_thread.stop_sweep()
             self.add_log("正在停止扫描...")
+            
+            # 更新UI状态
+            self.is_sweeping = False
+            self.start_button.setEnabled(True)
+            self.stop_button.setEnabled(False)
+            self.progress_bar.setVisible(False)
+            self.status_label.setText("已停止")
+            self.status_label.setStyleSheet("QLabel { color: #ff9800; font-weight: bold; }")
+            
+            # 请求重新开始仪器显示面板更新
+            self.request_start_display.emit()
+            
+            self.add_log("扫描已停止")
+            self.add_log("已恢复仪器显示更新")
+            
+            # 如果有数据，允许保存
+            if self.sweep_data:
+                self.save_button.setEnabled(True)
             
     def save_data(self):
         """保存扫描数据"""
@@ -783,7 +808,11 @@ class PyFreSweeper(QWidget):
         self.status_label.setText("扫描完成")
         self.status_label.setStyleSheet("QLabel { color: #4CAF50; font-weight: bold; }")
         
+        # 请求重新开始仪器显示面板更新
+        self.request_start_display.emit()
+        
         self.add_log(f"频率扫描完成，共采集 {len(self.sweep_data)} 个数据点")
+        self.add_log("已恢复仪器显示更新")
         
         # 自动保存数据
         if self.auto_save_checkbox.isChecked():
@@ -804,7 +833,11 @@ class PyFreSweeper(QWidget):
         self.status_label.setText("错误")
         self.status_label.setStyleSheet("QLabel { color: #f44336; font-weight: bold; }")
         
+        # 请求重新开始仪器显示面板更新
+        self.request_start_display.emit()
+        
         self.add_log(f"扫描错误: {error_message}")
+        self.add_log("已恢复仪器显示更新")
         QMessageBox.critical(self, "扫描错误", f"频率扫描时发生错误:\n{error_message}")
         
         # 如果有数据，允许保存

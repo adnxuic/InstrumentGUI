@@ -330,13 +330,17 @@ class PyFigureCanvas(QWidget):
             if len(frequencies) > 0:
                 freq_min, freq_max = min(frequencies), max(frequencies)
                 
-                # 设置频率轴范围（添加一些边距）
-                freq_margin = 0.1 * (freq_max - freq_min)
-                if freq_margin == 0:
-                    freq_margin = freq_min * 0.1 if freq_min > 0 else 1.0
+                # 设置频率轴范围（对于对数坐标，使用乘法设置边距）
+                if freq_min > 0 and freq_max > 0:  # 确保频率为正值
+                    # 对于对数坐标，使用比例边距而不是绝对边距
+                    freq_ratio = freq_max / freq_min if freq_min > 0 else 10
+                    margin_factor = 1.1  # 10% 的边距
                     
-                self.ax1.set_xlim(freq_min - freq_margin, freq_max + freq_margin)
-                self.ax2.set_xlim(freq_min - freq_margin, freq_max + freq_margin)
+                    freq_lower = freq_min / margin_factor
+                    freq_upper = freq_max * margin_factor
+                    
+                    self.ax1.set_xlim(freq_lower, freq_upper)
+                    self.ax2.set_xlim(freq_lower, freq_upper)
                 
                 # 设置振幅轴范围
                 if len(amplitudes) > 0:

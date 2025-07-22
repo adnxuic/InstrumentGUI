@@ -31,6 +31,10 @@ class PyRightPanel(QFrame):
         self.data_record.recording_started.connect(self._on_recording_started)
         self.data_record.recording_stopped.connect(self._on_recording_stopped)
         self.data_record.data_for_display.connect(self._on_data_for_display)
+        
+        # 连接频率扫描信号，用于控制仪器显示面板启停
+        self.fre_sweeper.request_stop_display.connect(self._on_request_stop_display)
+        self.fre_sweeper.request_start_display.connect(self._on_request_start_display)
 
         # 创建堆叠布局
         self.stacked_layout = QStackedLayout(self)
@@ -78,6 +82,18 @@ class PyRightPanel(QFrame):
         """接收数据记录的数据并转发给仪器显示面板"""
         self.instrument_data_show.update_from_external_data(data_point)
         
+    def _on_request_stop_display(self):
+        """响应停止仪器显示更新的请求（频率扫描开始时）"""
+        if hasattr(self.instrument_data_show, 'update_timer'):
+            self.instrument_data_show.update_timer.stop()
+            print("频率扫描开始 - 仪器显示定时器已停止")
+        
+    def _on_request_start_display(self):
+        """响应开始仪器显示更新的请求（频率扫描结束时）"""
+        if hasattr(self.instrument_data_show, 'update_timer'):
+            self.instrument_data_show.update_timer.start(1000)  # 恢复1秒更新间隔
+            print("频率扫描结束 - 仪器显示定时器已重启")
+
     def switch_to_panel(self, panel_name):
         """根据面板名称切换到对应面板"""
         if panel_name == "instrument_data":
