@@ -27,6 +27,11 @@ class PyRightPanel(QFrame):
         self.fre_sweeper = PyFreSweeper(self.instruments_control)
         self.fre_track = PyFreTrack(self.instruments_control)
 
+        # 连接数据记录和仪器显示之间的信号
+        self.data_record.recording_started.connect(self._on_recording_started)
+        self.data_record.recording_stopped.connect(self._on_recording_stopped)
+        self.data_record.data_for_display.connect(self._on_data_for_display)
+
         # 创建堆叠布局
         self.stacked_layout = QStackedLayout(self)
         
@@ -56,6 +61,22 @@ class PyRightPanel(QFrame):
             self.fre_sweeper.set_instruments_control(instruments_control)
         if hasattr(self.fre_track, 'set_instruments_control'):
             self.fre_track.set_instruments_control(instruments_control)
+            
+    def _on_recording_started(self):
+        """数据记录开始时的处理"""
+        # 让仪器数据显示面板切换到外部数据源模式
+        self.instrument_data_show.set_external_data_source(True)
+        print("数据记录开始 - 仪器显示面板切换到外部数据源模式")
+        
+    def _on_recording_stopped(self):
+        """数据记录停止时的处理"""
+        # 让仪器数据显示面板切换回直接读取模式
+        self.instrument_data_show.set_external_data_source(False)
+        print("数据记录停止 - 仪器显示面板切换回直接读取模式")
+        
+    def _on_data_for_display(self, data_point):
+        """接收数据记录的数据并转发给仪器显示面板"""
+        self.instrument_data_show.update_from_external_data(data_point)
         
     def switch_to_panel(self, panel_name):
         """根据面板名称切换到对应面板"""
@@ -83,7 +104,7 @@ class PyRightPanel(QFrame):
         self.setFixedWidth(self.original_width)
         
     def get_current_panel(self):
-        """获取当前面板"""
+        """获取当前面板名称和组件"""
         current_widget = self.stacked_layout.currentWidget()
         if current_widget == self.instrument_data_show:
             return "instrument_data", self.instrument_data_show

@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QProgressBar, QTextEdit, QGroupBox, QFormLayout,
     QMessageBox, QFileDialog, QLineEdit
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QTextCursor
 
 import sys
@@ -14,6 +14,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from component.datasort import DataRecordThread, DataSort
 
 class PyDataRecord(QWidget):
+    # 信号定义
+    recording_started = Signal()  # 开始记录信号
+    recording_stopped = Signal()  # 停止记录信号
+    data_for_display = Signal(dict)  # 数据广播信号，用于更新其他组件显示
+
     def __init__(self, instruments_control=None):
         super().__init__()
         self.instruments_control = instruments_control
@@ -392,6 +397,9 @@ class PyDataRecord(QWidget):
             
             self.add_log(f"开始记录 - 时间步长: {time_step}s, 最大时长: {max_duration or '无限'}s")
             
+            # 发射开始记录信号
+            self.recording_started.emit()
+            
         except Exception as e:
             self.add_log(f"启动记录失败: {e}")
             QMessageBox.critical(self, "错误", f"启动记录失败:\n{e}")
@@ -457,6 +465,9 @@ class PyDataRecord(QWidget):
         count = len(self.data_sort.current_data)
         self.count_label.setText(str(count))
         
+        # 广播数据到其他组件（如仪器数据显示面板）
+        self.data_for_display.emit(data_point)
+        
         # 发送数据到图表 (这里需要连接到plot widget)
         # TODO: 实现图表更新信号
         
@@ -470,6 +481,9 @@ class PyDataRecord(QWidget):
         self.status_timer.stop()
         
         self.add_log("记录完成")
+        
+        # 发射停止记录信号
+        self.recording_stopped.emit()
         
         # 自动保存数据
         if self.data_record_thread:

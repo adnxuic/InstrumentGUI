@@ -26,6 +26,10 @@ class PyInstrumentDataShow(QWidget):
         self.instrument_groups: Dict[str, QGroupBox] = {}  # 存储仪器组件 {instrument_address: group_widget}
         self.data_labels: Dict[str, Dict[str, QLabel]] = {}  # 存储数据标签 {instrument_address: {data_name: label}}
         
+        # 数据源控制
+        self.use_external_data = False  # 是否使用外部数据源
+        self.external_data = {}  # 外部数据缓存
+        
         # 设置日志
         self.logger = logging.getLogger(__name__)
         
@@ -48,6 +52,22 @@ class PyInstrumentDataShow(QWidget):
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(title_label)
         
+        # 数据源状态指示器
+        self.data_source_label = QLabel("数据源: 直接读取")
+        self.data_source_label.setStyleSheet("""
+            QLabel {
+                background-color: #e8f5e8;
+                border: 1px solid #4caf50;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 10px;
+                font-weight: bold;
+                color: #2e7d32;
+            }
+        """)
+        self.data_source_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(self.data_source_label)
+        
         # 创建滚动区域
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -69,13 +89,139 @@ class PyInstrumentDataShow(QWidget):
         """设置定时器进行数据更新"""
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_all_data)
-        self.update_timer.start(1000)  # 每0.01秒更新一次
+        self.update_timer.start(1000)  # 每1秒更新一次
         
     def set_instruments_control(self, instruments_control: InstrumentsControl) -> None:
         """设置仪器控制实例"""
         self.instruments_control = instruments_control
         self.refresh_instruments()
         
+    def set_external_data_source(self, use_external: bool) -> None:
+        """设置是否使用外部数据源（如数据记录线程）"""
+        self.use_external_data = use_external
+        if use_external:
+            self.logger.info("切换到外部数据源模式")
+            self.data_source_label.setText("数据源: 外部数据")
+            self.data_source_label.setStyleSheet("""
+                QLabel {
+                    background-color: #ffeaea;
+                    border: 1px solid #f44336;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-size: 10px;
+                    font-weight: bold;
+                    color: #c62828;
+                }
+            """)
+        else:
+            self.logger.info("切换到直接数据读取模式")
+            self.data_source_label.setText("数据源: 直接读取")
+            self.data_source_label.setStyleSheet("""
+                QLabel {
+                    background-color: #e8f5e8;
+                    border: 1px solid #4caf50;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-size: 10px;
+                    font-weight: bold;
+                    color: #2e7d32;
+                }
+            """)
+            
+    def update_from_external_data(self, data_point: Dict) -> None:
+        """从外部数据源更新数据（如DataRecordThread）"""
+        if not self.use_external_data:
+            return
+            
+        self.external_data = data_point
+        self._update_display_from_external_data()
+        
+    def _update_display_from_external_data(self) -> None:
+        """使用外部数据更新显示"""
+        try:
+            # 更新SR830数据
+            sr830_data = self.external_data.get('SR830', {})
+            for key, value in sr830_data.items():
+                # key格式: "address_parameter" (如 "GPIB0::8_X")
+                if '_' in key:
+                    address_param = key.rsplit('_', 1)
+                    if len(address_param) == 2:
+                        address, param = address_param
+                        if address in self.data_labels and param in self.data_labels[address]:
+                            if param in ['X', 'Y', 'R']:
+                                self.data_labels[address][param].setText(f"{value:.6f}")
+                            elif param == 'theta':
+                                self.data_labels[address][param].setText(f"{value:.3f}")
+                            elif param == 'frequency':
+                                self.data_labels[address][param].setText(f"{value:.3f}")
+                            else:
+                                self.data_labels[address][param].setText(str(value))
+                            
+                            # 恢复正常样式（清除错误状态）
+                            self._restore_label_style(self.data_labels[address][param], param)
+            
+            # 更新PPMS数据
+            ppms_data = self.external_data.get('PPMS', {})
+            for key, value in ppms_data.items():
+                # key格式: "address_parameter" (如 "127.0.0.1_temperature")
+                if '_' in key:
+                    address_param = key.rsplit('_', 1)
+                    if len(address_param) == 2:
+                        address, param = address_param
+                        if address in self.data_labels and param in self.data_labels[address]:
+                            if param in ['temperature', 'field']:
+                                self.data_labels[address][param].setText(f"{value:.5f}")
+                            else:
+                                self.data_labels[address][param].setText(str(value))
+                                
+                            # 恢复正常样式（清除错误状态）
+                            self._restore_label_style(self.data_labels[address][param], param)
+                            
+        except Exception as e:
+            self.logger.error(f"从外部数据更新显示失败: {e}")
+            
+    def _restore_label_style(self, label: QLabel, param: str) -> None:
+        """恢复标签的正常样式"""
+        if param == "reference":
+            # 参考源标签的样式需要根据值来设置，这里设置默认样式
+            label.setStyleSheet("""
+                QLabel {
+                    background-color: #f0f8f0;
+                    border: 1px solid #d0d0d0;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-family: 'Courier New', monospace;
+                    min-width: 80px;
+                    color: black;
+                }
+            """)
+        elif param == "output":
+            # 输出状态标签的样式需要根据值来设置，这里设置默认样式
+            label.setStyleSheet("""
+                QLabel {
+                    background-color: #f0f8f0;
+                    border: 1px solid #d0d0d0;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-family: 'Courier New', monospace;
+                    min-width: 80px;
+                    color: black;
+                }
+            """)
+        else:
+            # 其他标签使用默认样式
+            label.setStyleSheet("""
+                QLabel {
+                    background-color: #f0f8f0;
+                    border: 1px solid #d0d0d0;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-family: 'Courier New', monospace;
+                    min-width: 80px;
+                    color: black;
+                }
+            """)
+            
     def refresh_instruments(self) -> None:
         """刷新仪器列表，创建或移除仪器组"""
         if not self.instruments_control:
@@ -267,10 +413,16 @@ class PyInstrumentDataShow(QWidget):
         if not self.instruments_control:
             return
             
+        # 如果正在使用外部数据源，不进行直接数据读取
+        if self.use_external_data:
+            # 先检查是否有新的仪器需要添加
+            self.refresh_instruments()
+            return
+            
         # 先检查是否有新的仪器需要添加
         self.refresh_instruments()
         
-        # 更新每个仪器的数据
+        # 更新每个仪器的数据（仅在非外部数据源模式下）
         for address, instrument in self.instruments_control.instruments_instance.items():
             if address in self.data_labels:
                 self.update_instrument_data(address, instrument)
