@@ -37,8 +37,110 @@ class FrequencySweepThread(QThread):
         self.running = False
         self.sweep_data = []
         
+    # def run(self):
+    #     """执行频率扫描（使用WF1947内置扫描功能）"""
+    #     try:
+    #         self.running = True
+    #         self.sweep_data = []
+            
+    #         # 获取扫描参数
+    #         start_hz = self.sweep_params['start_hz']
+    #         stop_hz = self.sweep_params['stop_hz']
+    #         sweep_time_s = self.sweep_params['sweep_time_s']
+    #         spacing = self.sweep_params['spacing']
+    #         direction = self.sweep_params['direction']
+    #         sample_interval = self.sweep_params['sample_interval']
+            
+    #         # 设置WF1947基本参数
+    #         self.wf1947.set_waveform(self.sweep_params['waveform'])
+    #         self.wf1947.set_amplitude(self.sweep_params['amplitude'])
+    #         self.wf1947.set_offset(self.sweep_params['offset'])
+            
+    #         # 配置WF1947频率扫描
+    #         self.wf1947.setup_frequency_sweep(
+    #             start_hz=start_hz,
+    #             stop_hz=stop_hz,
+    #             sweep_time_s=sweep_time_s,
+    #             spacing=spacing,
+    #             direction=direction,
+    #             load=self.sweep_params['load']
+    #         )
+            
+    #         # 开启扫描输出
+    #         self.wf1947.set_output(True)
+            
+    #         # 计算采样点数
+    #         total_samples = int(sweep_time_s / sample_interval)
+            
+    #         # 在扫描过程中采样数据
+    #         start_time = time.perf_counter()
+    #         i = 0
+    #         while time.perf_counter() - start_time < sweep_time_s and self.running and self.wf1947.get_frequency() <= stop_hz:
+    #             o_time = time.perf_counter()
+                
+    #             # 从SR830读取数据
+    #             try:
+    #                 frequency_data = self.wf1947.get_frequency()
+    #                 snap_data = self.sr830.getSnap(1, 2, 3, 4)
+    #                 # 构建数据点
+    #                 data_point = {
+    #                     'frequency': frequency_data,
+    #                     'X': snap_data[0],
+    #                     'Y': snap_data[1], 
+    #                     'R': snap_data[2],
+    #                     'theta': snap_data[3],
+    #                     'timestamp': time.time(),
+    #                     'elapsed_time': time.perf_counter() - start_time
+    #                 }
+    #             except Exception as e:
+    #                 # 如果读取失败，使用基于时间进度的估算作为备用
+    #                 progress = (time.perf_counter() - start_time) / sweep_time_s
+    #                 if spacing == 'LINear':
+    #                     current_freq = start_hz + (stop_hz - start_hz) * progress
+    #                 else:  # LOGarithmic
+    #                     current_freq = start_hz * ((stop_hz / start_hz) ** progress)
+    #                 # 构建备用数据点
+    #                 data_point = {
+    #                     'frequency': current_freq,
+    #                     'X': 0.0,
+    #                     'Y': 0.0, 
+    #                     'R': 0.0,
+    #                     'theta': 0.0,
+    #                     'timestamp': time.time(),
+    #                     'elapsed_time': time.perf_counter() - start_time
+    #                 }
+    #                 print(f"警告: 无法从SR830读取数据")
+                
+    #             self.sweep_data.append(data_point)
+                
+    #             # 发射数据信号
+    #             self.data_acquired.emit(data_point)
+    #             self.progress_updated.emit(i + 1, total_samples)
+    #             i += 1
+    #             # 等待采样间隔
+    #             time.sleep(max(0, sample_interval-(time.perf_counter()-o_time)))
+                
+    #         # 关闭输出
+    #         self.wf1947.set_output(False)
+
+    #         # 重置WF1947
+    #         self.wf1947.reset()
+            
+    #         # 发射完成信号
+    #         if self.running:
+    #             self.sweep_finished.emit()
+                
+    #     except Exception as e:
+    #         self.error_occurred.emit(str(e))
+    #     finally:
+    #         # 确保关闭输出
+    #         try:
+    #             self.wf1947.set_output(False)
+    #         except:
+    #             pass
+
     def run(self):
-        """执行频率扫描（使用WF1947内置扫描功能）"""
+        """执行频率扫描（程序控制WF1947）"""
         try:
             self.running = True
             self.sweep_data = []
@@ -48,35 +150,31 @@ class FrequencySweepThread(QThread):
             stop_hz = self.sweep_params['stop_hz']
             sweep_time_s = self.sweep_params['sweep_time_s']
             spacing = self.sweep_params['spacing']
-            direction = self.sweep_params['direction']
-            sample_interval = self.sweep_params['sample_interval']
+            sample_interval = 0.5 # 采样间隔固定为0.5s
             
             # 设置WF1947基本参数
             self.wf1947.set_waveform(self.sweep_params['waveform'])
             self.wf1947.set_amplitude(self.sweep_params['amplitude'])
             self.wf1947.set_offset(self.sweep_params['offset'])
             
-            # 配置WF1947频率扫描
-            self.wf1947.setup_frequency_sweep(
-                start_hz=start_hz,
-                stop_hz=stop_hz,
-                sweep_time_s=sweep_time_s,
-                spacing=spacing,
-                direction=direction,
-                load=self.sweep_params['load']
-            )
-            
             # 开启扫描输出
             self.wf1947.set_output(True)
             
             # 计算采样点数
             total_samples = int(sweep_time_s / sample_interval)
+
+            # 计算频率间隔
+            frequency_interval = (stop_hz - start_hz) / total_samples
             
             # 在扫描过程中采样数据
             start_time = time.perf_counter()
-            i = 0
-            while time.perf_counter() - start_time < sweep_time_s and self.running and self.wf1947.get_frequency() <= stop_hz:
-                o_time = time.perf_counter()
+            for i in range(total_samples):
+                
+                # 设置频率
+                self.wf1947.set_frequency(start_hz + i * frequency_interval)
+
+                # 等待稳定
+                time.sleep(sample_interval)
                 
                 # 从SR830读取数据
                 try:
@@ -116,9 +214,6 @@ class FrequencySweepThread(QThread):
                 # 发射数据信号
                 self.data_acquired.emit(data_point)
                 self.progress_updated.emit(i + 1, total_samples)
-                i += 1
-                # 等待采样间隔
-                time.sleep(max(0, sample_interval-(time.perf_counter()-o_time)))
                 
             # 关闭输出
             self.wf1947.set_output(False)
