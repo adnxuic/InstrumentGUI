@@ -99,6 +99,9 @@ class MainWindow(QMainWindow):
         self.right_column.panel_changed.connect(self.plot_widget.switch_to_canvas)
         self.right_column.panel_collapsed.connect(self.right_panel.hide_panel)
         
+        # 连接数字PID信号到绘图组件
+        self.setup_pid_plot_connections()
+        
         # 添加组件到分割器
         self.central_splitter.addWidget(self.left_column)
         self.central_splitter.addWidget(self.left_panel)
@@ -111,6 +114,39 @@ class MainWindow(QMainWindow):
         
         # 设置分割器作为中央部件
         self.setCentralWidget(self.central_splitter)
+        
+    def setup_pid_plot_connections(self):
+        """设置PID控制器与绘图组件的连接"""
+        try:
+            # 获取频率追踪面板
+            fre_track_panel = self.right_panel.fre_track
+            
+            # 连接数字PID的绘图信号
+            if hasattr(fre_track_panel, 'digitalPID'):
+                fre_track_panel.digitalPID.plot_data_updated.connect(
+                    self.on_frequency_tracking_data_updated
+                )
+                print("数字PID绘图信号已连接")
+                
+        except Exception as e:
+            print(f"设置PID绘图连接时出错: {e}")
+            
+    def on_frequency_tracking_data_updated(self, plot_data):
+        """处理频率追踪数据更新"""
+        try:
+            # 获取当前面板
+            current_panel_name, _ = self.right_panel.get_current_panel()
+            
+            # 只有在频率追踪面板激活时才更新图表
+            if current_panel_name == "fre_track":
+                # 切换到频率追踪图表
+                self.plot_widget.switch_to_canvas("fre_track")
+                # 更新频率追踪图表
+                if hasattr(self.plot_widget, 'fre_track_figure_canvas'):
+                    self.plot_widget.fre_track_figure_canvas.update_frequency_tracking_plots(plot_data)
+                    
+        except Exception as e:
+            print(f"更新频率追踪图表时出错: {e}")
 
     def on_panel_changed(self, panel_name):
         """当面板切换时的处理"""

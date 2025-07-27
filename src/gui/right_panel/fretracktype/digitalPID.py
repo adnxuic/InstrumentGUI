@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
                                QLabel, QLineEdit, QPushButton, QSpinBox, QDoubleSpinBox,
                                QCheckBox, QMessageBox, QFileDialog)
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../../.."))
@@ -10,6 +10,9 @@ from datetime import datetime
 
 
 class PyDigitalPID(QWidget):
+    # 信号定义
+    plot_data_updated = Signal(dict)  # 绘图数据更新信号
+    
     def __init__(self, instruments_control=None):
         super().__init__()
         self.instruments_control = instruments_control
@@ -54,7 +57,7 @@ class PyDigitalPID(QWidget):
         p_layout.addWidget(QLabel("比例系数 (Kp):"))
         self.kp_spinbox = QDoubleSpinBox()
         self.kp_spinbox.setRange(0.0, 1000.0)
-        self.kp_spinbox.setValue(1.0)
+        self.kp_spinbox.setValue(0.5)
         self.kp_spinbox.setDecimals(3)
         p_layout.addWidget(self.kp_spinbox)
         pid_layout.addLayout(p_layout)
@@ -86,6 +89,17 @@ class PyDigitalPID(QWidget):
         target_group = QGroupBox("目标设置")
         target_layout = QVBoxLayout()
         
+        # 初始频率设置
+        initial_freq_layout = QHBoxLayout()
+        initial_freq_layout.addWidget(QLabel("初始频率(Hz):"))
+        self.initial_freq_spinbox = QDoubleSpinBox()
+        self.initial_freq_spinbox.setRange(1, 1000000.0)  # 1Hz到10MHz
+        self.initial_freq_spinbox.setValue(1000.0)  # 默认1kHz
+        self.initial_freq_spinbox.setDecimals(1)
+        self.initial_freq_spinbox.setSuffix(" Hz")
+        initial_freq_layout.addWidget(self.initial_freq_spinbox)
+        target_layout.addLayout(initial_freq_layout)
+        
         target_freq_layout = QHBoxLayout()
         target_freq_layout.addWidget(QLabel("目标相位(°):"))
         self.target_freq_spinbox = QDoubleSpinBox()
@@ -106,9 +120,9 @@ class PyDigitalPID(QWidget):
         sample_layout = QHBoxLayout()
         sample_layout.addWidget(QLabel("采样间隔(s):"))
         self.sample_interval_spinbox = QDoubleSpinBox()
-        self.sample_interval_spinbox.setRange(0.05, 10.0)
-        self.sample_interval_spinbox.setValue(0.1)
-        self.sample_interval_spinbox.setDecimals(2)
+        self.sample_interval_spinbox.setRange(0.5, 1.0)
+        self.sample_interval_spinbox.setValue(0.5)
+        self.sample_interval_spinbox.setDecimals(1)
         sample_layout.addWidget(self.sample_interval_spinbox)
         tracking_layout.addLayout(sample_layout)
         
@@ -220,6 +234,15 @@ class PyDigitalPID(QWidget):
             if not self.selected_wf1947 or not self.selected_sr830:
                 QMessageBox.warning(self, "错误", "请先在频率追踪面板中选择WF1947和SR830仪器")
                 return
+            
+            # 设置WF1947的初始频率
+            initial_frequency = self.initial_freq_spinbox.value()
+            self.selected_wf1947.set_frequency(initial_frequency)
+            print(f"设置WF1947初始频率: {initial_frequency} Hz")
+            
+            # 开启WF1947输出
+            self.selected_wf1947.set_output(True)
+            print("WF1947输出已开启")
                 
             # 获取PID参数
             pid_params = {
@@ -233,7 +256,8 @@ class PyDigitalPID(QWidget):
             self.tracking_thread = FrequencyTrackingThread(
                 self.selected_wf1947,
                 self.selected_sr830, 
-                pid_params
+                pid_params,
+                initial_frequency
             )
             
             # 设置追踪参数
@@ -340,17 +364,20 @@ class PyDigitalPID(QWidget):
         frequencies = [point['frequency'] for point in self.tracking_data]
         phases = [point['phase'] for point in self.tracking_data]
         
+        # 获取目标相位值
+        setpoint = self.target_freq_spinbox.value() if hasattr(self, 'target_freq_spinbox') else 0.0
+        
         plot_data = {
             'frequency_tracking': {
                 'time': times,
                 'frequency': frequencies,
-                'phase': phases
+                'phase': phases,
+                'setpoint': setpoint
             }
         }
         
-        # 通知父组件更新图表（需要在父组件中实现）
-        if hasattr(self.parent(), 'update_frequency_tracking_plot'):
-            self.parent().update_frequency_tracking_plot(plot_data)
+        # 通过信号发送绘图数据
+        self.plot_data_updated.emit(plot_data)
             
     def save_data_manually(self):
         """手动保存数据"""

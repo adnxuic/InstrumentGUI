@@ -4,6 +4,14 @@ from typing import Optional, Callable
 from PySide6.QtCore import QThread, Signal
 
 
+import os
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from instruments.sr830 import SR830
+from instruments.wf1947 import WF1947
+
 class DigitalPID:
     """
     数字PID控制器类
@@ -205,11 +213,14 @@ class FrequencyTrackingThread(QThread):
     error_occurred = Signal(str)  # 错误信号
     status_updated = Signal(str)  # 状态更新信号
     
-    def __init__(self, wf1947_instrument, sr830_instrument, pid_params=None):
+    def __init__(self, wf1947_instrument, sr830_instrument, pid_params=None, initial_frequency=None):
         super().__init__()
         # 直接使用传入的仪器实例
-        self.wf1947 = wf1947_instrument
-        self.sr830 = sr830_instrument
+        self.wf1947: WF1947 = wf1947_instrument
+        self.sr830: SR830 = sr830_instrument
+        
+        # 初始频率
+        self.initial_frequency = initial_frequency
         
         # PID控制器
         if pid_params is None:
@@ -263,15 +274,23 @@ class FrequencyTrackingThread(QThread):
     def stop_tracking(self):
         """停止频率追踪"""
         self.is_tracking = False
+        # 关闭输出
+        self.wf1947.set_output(False)
+        # 重置WF1947
+        self.wf1947.reset()
             
     def run(self):
         """线程主循环"""
         try:
             self.status_updated.emit("正在初始化频率追踪...")
             
-            # 获取初始频率
-            initial_frequency = self.wf1947.get_frequency()
-            current_frequency = initial_frequency
+            # 使用传入的初始频率，如果没有则从WF1947读取
+            if self.initial_frequency is not None:
+                current_frequency = self.initial_frequency
+                print(f"使用设定的初始频率: {current_frequency} Hz")
+            else:
+                current_frequency = self.wf1947.get_frequency()
+                print(f"从WF1947读取初始频率: {current_frequency} Hz")
             
             self.status_updated.emit("数字PID频率追踪已启动")
             
@@ -286,7 +305,7 @@ class FrequencyTrackingThread(QThread):
                     
                 try:
                     # 读取当前相位
-                    phase_data = self.sr830.getSnap(4)  # 获取相位
+                    phase_data = self.sr830.getOut(4)  # 获取相位
                     current_phase = phase_data[0] if isinstance(phase_data, (list, tuple)) else phase_data
                     
                     # PID计算
@@ -324,6 +343,7 @@ class FrequencyTrackingThread(QThread):
                     
                 except Exception as e:
                     self.error_occurred.emit(f"追踪过程出错: {e}")
+                    self.stop_tracking()
                     
                 # 等待下一个采样周期
                 time.sleep(self.sample_interval)
