@@ -1,6 +1,8 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, 
-    QGroupBox, QLabel, QFrame, QGridLayout
+    QGroupBox, QLabel, QFrame, QGridLayout, QPushButton,
+    QDialog, QFormLayout, QLineEdit, QComboBox, QCheckBox,
+    QDialogButtonBox, QMessageBox
 )
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont
@@ -8,6 +10,7 @@ from typing import Dict, Optional, Any
 from numpy.typing import NDArray
 
 import logging
+import time
 
 import os
 import sys
@@ -17,6 +20,131 @@ from instruments.instrumentscontrol import InstrumentsControl
 from instruments.sr830 import SR830
 from instruments.ppms import PPMS
 from instruments.wf1947 import WF1947
+
+class WF1947SettingsDialog(QDialog):
+    """WF1947参数设置对话框"""
+    
+    def __init__(self, parent=None, instrument: WF1947 = None):
+        super().__init__(parent)
+        self.instrument = instrument
+        self.setWindowTitle("WF1947 参数设置")
+        self.setModal(True)
+        self.resize(400, 300)
+        
+        self.init_ui()
+        self.load_current_values()
+        
+    def init_ui(self):
+        """初始化UI"""
+        layout = QVBoxLayout(self)
+        
+        # 创建表单布局
+        form_layout = QFormLayout()
+        
+        # 波形选择
+        self.waveform_combo = QComboBox()
+        self.waveform_combo.addItems(["SIN", "SQU", "RAMP", "PULSE", "NOISE", "DC", "USER"])
+        form_layout.addRow("波形:", self.waveform_combo)
+        
+        # 频率输入
+        self.frequency_edit = QLineEdit()
+        self.frequency_edit.setPlaceholderText("输入频率 (Hz)")
+        form_layout.addRow("频率 (Hz):", self.frequency_edit)
+        
+        # 幅值输入
+        self.amplitude_edit = QLineEdit()
+        self.amplitude_edit.setPlaceholderText("输入幅值 (Vpp)")
+        form_layout.addRow("幅值 (Vpp):", self.amplitude_edit)
+        
+        # 直流偏置输入
+        self.offset_edit = QLineEdit()
+        self.offset_edit.setPlaceholderText("输入直流偏置 (V)")
+        form_layout.addRow("直流偏置 (V):", self.offset_edit)
+        
+        # 负载阻抗输入
+        self.load_edit = QLineEdit()
+        self.load_edit.setPlaceholderText("输入负载阻抗 (Ohm) 或 INF")
+        form_layout.addRow("负载阻抗:", self.load_edit)
+        
+        # 输出状态
+        self.output_checkbox = QCheckBox("输出开启")
+        form_layout.addRow("输出状态:", self.output_checkbox)
+        
+        layout.addLayout(form_layout)
+        
+        # 按钮组
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(self.accept_settings)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+        
+    def load_current_values(self):
+        """加载当前仪器的设置值"""
+        if not self.instrument:
+            return
+            
+        try:
+            # 获取当前值并填入表单
+            current_waveform = self.instrument.get_waveform()
+            waveform_index = self.waveform_combo.findText(current_waveform)
+            if waveform_index >= 0:
+                self.waveform_combo.setCurrentIndex(waveform_index)
+                
+            self.frequency_edit.setText(str(self.instrument.get_frequency()))
+            self.amplitude_edit.setText(str(self.instrument.get_amplitude()))
+            self.offset_edit.setText(str(self.instrument.get_offset()))
+            self.load_edit.setText(str(self.instrument.get_load()))
+            
+            output_state = self.instrument.get_output()
+            self.output_checkbox.setChecked(output_state == "ON")
+            
+        except Exception as e:
+            QMessageBox.warning(self, "警告", f"读取当前设置失败: {e}")
+            
+    def accept_settings(self):
+        """应用设置"""
+        if not self.instrument:
+            QMessageBox.warning(self, "错误", "没有连接的仪器")
+            return
+            
+        try:
+            # 设置波形
+            waveform = self.waveform_combo.currentText()
+            self.instrument.set_waveform(waveform)
+            
+            # 设置频率
+            frequency = float(self.frequency_edit.text())
+            self.instrument.set_frequency(frequency)
+            
+            # 设置幅值
+            amplitude = float(self.amplitude_edit.text())
+            self.instrument.set_amplitude(amplitude)
+            
+            # 设置直流偏置
+            offset = float(self.offset_edit.text())
+            self.instrument.set_offset(offset)
+            
+            # 设置负载阻抗
+            load_text = self.load_edit.text().strip()
+            if load_text.upper() == "INF":
+                self.instrument.set_load("INF")
+            else:
+                load_value = int(float(load_text))  # 允许浮点数输入但转为整数
+                self.instrument.set_load(load_value)
+            
+            # 设置输出状态
+            output_state = self.output_checkbox.isChecked()
+            self.instrument.set_output(output_state)
+            
+            QMessageBox.information(self, "成功", "参数设置成功！")
+            self.accept()
+            
+        except ValueError as e:
+            QMessageBox.warning(self, "输入错误", f"请检查输入的数值格式: {e}")
+        except Exception as e:
+            QMessageBox.critical(self, "设置失败", f"设置参数时发生错误: {e}")
 
 class PyInstrumentDataShow(QWidget):
     def __init__(self, instruments_control: InstrumentsControl) -> None:
@@ -396,6 +524,119 @@ class PyInstrumentDataShow(QWidget):
             layout.addWidget(value_label, i, 1)
             
             self.data_labels[address][key] = value_label
+            
+        # 创建按钮容器
+        button_layout = QHBoxLayout()
+        
+        # 添加设置按钮
+        settings_button = QPushButton("⚙️ 参数设置")
+        settings_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+                min-height: 24px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+        """)
+        
+        # 添加重置按钮
+        reset_button = QPushButton("🔄 重置")
+        reset_button.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+                min-height: 24px;
+            }
+            QPushButton:hover {
+                background-color: #f57c00;
+            }
+            QPushButton:pressed {
+                background-color: #e65100;
+            }
+        """)
+        
+        # 将按钮连接到相应方法
+        settings_button.clicked.connect(lambda: self.open_wf1947_settings(address))
+        reset_button.clicked.connect(lambda: self.reset_wf1947(address))
+        
+        # 将按钮添加到水平布局
+        button_layout.addWidget(settings_button)
+        button_layout.addWidget(reset_button)
+        
+        # 创建按钮容器widget并设置布局
+        button_widget = QWidget()
+        button_widget.setLayout(button_layout)
+        
+        # 将按钮容器跨两列显示
+        layout.addWidget(button_widget, len(data_items), 0, 1, 2)
+        
+    def open_wf1947_settings(self, address: str) -> None:
+        """打开WF1947设置对话框"""
+        if not self.instruments_control:
+            return
+            
+        # 获取对应的WF1947仪器实例
+        instrument = self.instruments_control.instruments_instance.get(address)
+        if not instrument or getattr(instrument, 'type', None) != 'WF1947':
+            QMessageBox.warning(self, "错误", "找不到对应的WF1947仪器")
+            return
+            
+        # 创建并显示设置对话框
+        dialog = WF1947SettingsDialog(self, instrument)
+        dialog.exec()
+        
+    def reset_wf1947(self, address: str) -> None:
+        """重置WF1947仪器到默认状态"""
+        if not self.instruments_control:
+            return
+            
+        # 获取对应的WF1947仪器实例
+        instrument: WF1947 = self.instruments_control.instruments_instance.get(address)
+        if not instrument or getattr(instrument, 'type', None) != 'WF1947':
+            QMessageBox.warning(self, "错误", "找不到对应的WF1947仪器")
+            return
+            
+        # 确认重置操作
+        reply = QMessageBox.question(
+            self, 
+            "确认重置", 
+            f"确定要重置 WF1947 ({address}) 到默认状态吗？\n\n"
+            "重置后将恢复到初始设置：\n"
+            "• 波形：正弦波 (SIN)\n"
+            "• 频率：1kHz\n"
+            "• 幅值：100mV (0.1V)\n"
+            "• 直流偏置：0V\n"
+            "• 输出：关闭",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                # 执行重置操作
+                self.logger.info(f"开始重置WF1947仪器: {address}")
+                instrument.reset()  # 发送*RST命令
+                
+                QMessageBox.information(self, "成功", f"WF1947 ({address}) 已成功重置到默认状态！")
+                self.logger.info(f"WF1947仪器重置完成: {address}")
+                
+            except Exception as e:
+                error_msg = f"重置WF1947仪器失败: {e}"
+                self.logger.error(f"{error_msg} (地址: {address})")
+                QMessageBox.critical(self, "重置失败", error_msg)
             
     def remove_instrument_group(self, address: str) -> None:
         """移除仪器组"""
