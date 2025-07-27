@@ -84,7 +84,7 @@ class WF1947:
         """Internal method, send command to the specified channel."""
         if command.upper().startswith(('FREQ', 'VOLT', 'PHAS', 'FUNC', 'SWE', 'FM', 'PM', 'AM', 'BURS')):
             self.inst.write(f'SOURce{self.channel}:{command}')
-        elif command.upper().startswith(('OUTP', 'LOAD')):
+        elif command.upper().startswith(('LOAD')):
             self.inst.write(f'OUTPut{self.channel}:{command}')
         else:
             self.inst.write(command)

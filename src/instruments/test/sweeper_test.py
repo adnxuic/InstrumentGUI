@@ -30,14 +30,18 @@ try:
     # fg.set_output(False)
     # print("扫描完成，输出已关闭。")
 
-    for i in range(10):
-        fg.set_frequency(10000+10000*i)
+    fg.set_output(True)
+
+    print(fg.get_output())
+
+    for i in range(2):
+        fg.set_frequency(1000+500*i)
         print(fg.get_frequency())
-        time.sleep(0.4)
+        time.sleep(0.5)
 
     fg.reset()
 
-    time.sleep(5)
+    time.sleep(1)
 
 finally:
     if 'fg' in locals():
