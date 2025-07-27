@@ -273,18 +273,29 @@ class PyFigureCanvas(QWidget):
         """设置共振频率追踪图表"""
         self.fig.clear()
         
-        # 创建主轴和副轴
+        # 创建两个子图：频率和相位
         self.ax1 = self.fig.add_subplot(2, 1, 1)
         self.ax2 = self.fig.add_subplot(2, 1, 2)
         
-        self.ax1.set_title("频率追踪 - 幅度", fontsize=12, fontweight='bold')
-        self.ax1.set_ylabel("幅度")
+        self.ax1.set_title("频率追踪 - 输出频率", fontsize=12, fontweight='bold')
+        self.ax1.set_ylabel("频率 (Hz)")
         self.ax1.grid(True, alpha=0.3)
         
-        self.ax2.set_title("频率追踪 - 频率", fontsize=12, fontweight='bold')
+        self.ax2.set_title("频率追踪 - 相位", fontsize=12, fontweight='bold')
         self.ax2.set_xlabel("时间 (s)")
-        self.ax2.set_ylabel("频率 (Hz)")
+        self.ax2.set_ylabel("相位 (°)")
         self.ax2.grid(True, alpha=0.3)
+        
+        # 初始化线条对象
+        self.freq_line, = self.ax1.plot([], [], 'b-', linewidth=2, label='WF1947频率')
+        self.phase_line, = self.ax2.plot([], [], 'r-', linewidth=2, label='SR830相位')
+        
+        # 添加目标相位参考线（将在update时设置）
+        self.setpoint_line, = self.ax2.plot([], [], 'g--', linewidth=1, label='目标相位')
+        
+        # 添加图例
+        self.ax1.legend(loc='upper right')
+        self.ax2.legend(loc='upper right')
         
         # 更好的布局
         self.fig.subplots_adjust(left=0.12, right=0.95, top=0.92, bottom=0.12, hspace=0.45)
@@ -366,6 +377,94 @@ class PyFigureCanvas(QWidget):
             
         except Exception as e:
             print(f"更新频率扫描图表时出错: {e}")
+            
+    def update_frequency_tracking_plots(self, plot_data):
+        """更新频率追踪图表
+        
+        Args:
+            plot_data: 包含频率追踪数据的字典
+                {
+                    'frequency_tracking': {
+                        'time': [...],
+                        'frequency': [...],
+                        'phase': [...],
+                        'setpoint': float (可选)
+                    }
+                }
+        """
+        if not plot_data or 'frequency_tracking' not in plot_data:
+            return
+            
+        try:
+            tracking_data = plot_data['frequency_tracking']
+            times = tracking_data.get('time', [])
+            frequencies = tracking_data.get('frequency', [])
+            phases = tracking_data.get('phase', [])
+            setpoint = tracking_data.get('setpoint', None)
+            
+            if not times or not frequencies or not phases:
+                return
+                
+            # 更新频率图
+            self.freq_line.set_data(times, frequencies)
+            
+            # 更新相位图
+            self.phase_line.set_data(times, phases)
+            
+            # 更新目标相位参考线
+            if setpoint is not None and times:
+                setpoint_y = [setpoint] * len(times)
+                self.setpoint_line.set_data(times, setpoint_y)
+            
+            # 自动调整坐标轴范围
+            if len(times) > 0:
+                time_min, time_max = min(times), max(times)
+                time_margin = max(0.1, (time_max - time_min) * 0.05)
+                
+                # 频率轴范围
+                if len(frequencies) > 0:
+                    freq_min, freq_max = min(frequencies), max(frequencies)
+                    freq_margin = max(1.0, (freq_max - freq_min) * 0.1)
+                    
+                    self.ax1.set_xlim(time_min - time_margin, time_max + time_margin)
+                    self.ax1.set_ylim(freq_min - freq_margin, freq_max + freq_margin)
+                
+                # 相位轴范围
+                if len(phases) > 0:
+                    phase_min, phase_max = min(phases), max(phases)
+                    
+                    # 处理相位的特殊情况（可能需要扩展到±180度范围）
+                    if setpoint is not None:
+                        phase_min = min(phase_min, setpoint - 10)
+                        phase_max = max(phase_max, setpoint + 10)
+                    
+                    phase_margin = max(5.0, (phase_max - phase_min) * 0.1)
+                    
+                    self.ax2.set_xlim(time_min - time_margin, time_max + time_margin)
+                    self.ax2.set_ylim(phase_min - phase_margin, phase_max + phase_margin)
+            
+            # 重新绘制
+            self.canva.draw()
+            
+        except Exception as e:
+            print(f"更新频率追踪图表时出错: {e}")
+            
+    def clear_frequency_tracking_plots(self):
+        """清空频率追踪图表"""
+        if hasattr(self, 'freq_line'):
+            self.freq_line.set_data([], [])
+        if hasattr(self, 'phase_line'):
+            self.phase_line.set_data([], [])
+        if hasattr(self, 'setpoint_line'):
+            self.setpoint_line.set_data([], [])
+            
+        # 重置轴范围
+        self.ax1.set_xlim(0, 1)
+        self.ax1.set_ylim(0, 1)
+        self.ax2.set_xlim(0, 1) 
+        self.ax2.set_ylim(-180, 180)
+        
+        self.canva.draw()
 
     def init_set(self):
         # 添加滚动条

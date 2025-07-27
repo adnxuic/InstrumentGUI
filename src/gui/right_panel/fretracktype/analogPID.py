@@ -7,6 +7,11 @@ class PyAnalogPID(QWidget):
     def __init__(self, instruments_control=None):
         super().__init__()
         self.instruments_control = instruments_control
+        
+        # 选中的仪器实例
+        self.selected_wf1947 = None
+        self.selected_sr830 = None
+        
         self.init_ui()
         
     def init_ui(self):
@@ -201,3 +206,14 @@ class PyAnalogPID(QWidget):
         self.stop_button.setEnabled(False)
         self.status_label.setText("状态: 待机")
         print("模拟PID控制停止")
+        
+    def set_selected_instruments(self, wf1947, sr830):
+        """设置选中的仪器实例"""
+        self.selected_wf1947 = wf1947
+        self.selected_sr830 = sr830
+        
+        # 如果有仪器，显示已选择状态
+        if wf1947 and sr830:
+            print(f"模拟PID控制器已设置仪器: WF1947={wf1947.type}, SR830={sr830.type}")
+        else:
+            print("模拟PID控制器仪器已清除")
